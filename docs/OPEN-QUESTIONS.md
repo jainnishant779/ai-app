@@ -6,6 +6,27 @@ A recurring theme: the research repo is unusually honest that **almost nothing h
 
 ---
 
+## Measured on a real phone (2026-10-01)
+
+Device: Motorola Edge 60 Fusion, MediaTek MT6878 (Dimensity 7400), 7.6 GB RAM, Android 16, arm64-v8a. llama.cpp `b11312`, Release native build, Qwen3-0.6B Q4_K_M (stock), `n_ctx` 1024, q8_0/q8_0 KV, flash attention on, 4 threads.
+
+| Question | Result |
+|---|---|
+| Q2 System prefix tokens | **299** (docs estimated 294). Measured with the real tokenizer at load. |
+| Q3 Decode speed | **~15 tok/s** greedy on a short Hinglish answer (26 tokens). Longer runs and thermals not yet measured. |
+| Q9 Prefix cache | cold prefill **6.3 s** (299 tokens), warm load **12 ms**, identical greedy output after restore. |
+| Prompt contract | Bytes and token ids equal `transformers` for all 9 golden fixtures, including the `tool`-as-`user` rendering. |
+| Grammar | `tool_call.gbnf` forced a valid `set_timer` call on the untuned model; the parser reads it. |
+| **Q1 Memory** | **500 MB gate MISSED: 638 MB PSS** (726 MB RSS) with the model loaded and one generation done. |
+
+PSS breakdown (KB): private-other 384,980 (the mmapped GGUF), native-heap 112,692 (KV ~60 MB + compute buffers), code 122,520, java-heap 10,248, system 7,618, swap 30,780.
+
+The weights alone (~385 MB) plus KV and buffers (~113 MB) already reach ~500 MB, so lowering `n_ctx` cannot close the gap. The weights are clean file-backed pages the OS can reclaim, so anonymous memory (native heap + java heap, ~125 MB) may be the better metric. **The gate needs a decision**; until then `MemoryGate` uses a 700 MB regression ceiling.
+
+An unoptimized (Debug) native build is ~50x slower and made the first runs meaningless; the Gradle config now forces `-DCMAKE_BUILD_TYPE=Release` for every variant.
+
+---
+
 ## Blocking — measure before the code that depends on them
 
 ### 1. Does the model + KV actually fit under 500 MB on the phone?

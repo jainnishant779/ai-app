@@ -11,6 +11,6 @@ set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/llama.cpp llama_build)
 
-add_library(nishu_llama SHARED llama_jni.cpp)
+add_library(nishu_llama SHARED llama_jni.cpp nishu_session.cpp)
 target_compile_definitions(nishu_llama PRIVATE NISHU_LLAMA_TAG="${NISHU_LLAMA_TAG}")
 target_link_libraries(nishu_llama llama ggml android log)

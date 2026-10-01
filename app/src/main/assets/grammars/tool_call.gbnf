@@ -1,0 +1,9 @@
+root ::= "\n{\"name\": \"" name "\", \"arguments\": " obj "}\n</tool_call>"
+name ::= "calculator" | "unit_converter" | "date_time" | "set_alarm" | "set_timer" | "device_control" | "open_app" | "make_call" | "send_message"
+obj ::= "{" ws ( pair ( "," ws pair )* )? "}"
+pair ::= string ws ":" ws value
+value ::= string | number | "true" | "false" | "null" | obj | arr
+arr ::= "[" ws ( value ( "," ws value )* )? "]"
+string ::= "\"" ( [^"\\\n] | "\\" ["\\/bfnrt] )* "\""
+number ::= "-"? [0-9]+ ( "." [0-9]+ )?
+ws ::= [ ]?

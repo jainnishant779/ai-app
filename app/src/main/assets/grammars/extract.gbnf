@@ -1,0 +1,4 @@
+root ::= "{" ws "\"tasks\":" ws "[" ws ( task ( "," ws task ){0,7} )? "]" ws "," ws "\"decisions\":" ws "[" ws ( str ( "," ws str ){0,7} )? "]" ws "}"
+task ::= "{" ws "\"text\":" ws str ( "," ws "\"owner\":" ws str )? ( "," ws "\"due\":" ws str )? ws "}"
+str ::= "\"" [^"\\\n]{1,200} "\""
+ws ::= [ \n]?

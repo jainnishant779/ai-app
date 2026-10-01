@@ -23,7 +23,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
-            cmake { arguments += "-DNISHU_LLAMA_TAG=$llamaTag" }
+            // Always optimize native code: an unoptimized (Debug) llama.cpp is ~50x slower and useless for any measurement.
+            cmake { arguments += listOf("-DNISHU_LLAMA_TAG=$llamaTag", "-DCMAKE_BUILD_TYPE=Release") }
         }
     }
 
