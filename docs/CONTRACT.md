@@ -1,6 +1,6 @@
 # Runtime contract
 
-What the app **must** send the model, byte for byte. Everything here was measured against `D:\research_llm`, not assumed. Where a claim is unverified, it says so.
+What the app **must** send the model, byte for byte. Everything here was measured against `D:\nishant\llm_research`, not assumed. Where a claim is unverified, it says so.
 
 > **Why this file exists.** `HANDOFF.md:31` — *"Phone app ko bilkul yahi prompt bhejna hai"* ("send the app exactly this prompt"). The training data baked an exact prefix into all 6,212 examples. A one-byte drift shifts tokenization and degrades tool calling and Hinglish quality — and it presents as "the model is bad", not as a bug. This is the hardest class of error to debug here, so it is pinned down with hashes and a test.
 
@@ -9,7 +9,7 @@ What the app **must** send the model, byte for byte. Everything here was measure
 ## 1. The system prompt
 
 ```
-source   D:\research_llm\data\v2\final\train.jsonl, line 1, messages[0].content
+source   D:\nishant\llm_research\data\v2\final\train.jsonl, line 1, messages[0].content
 size     1024 chars / 1024 UTF-8 bytes (pure ASCII)
 newlines 11 LF, 0 CR
 sha256   0d30a62b8de680791d8acbc8a14e5d62df0d0cca2c4474a3ae63a98aead6f3c3

@@ -4,7 +4,7 @@
 
 ## Context
 
-`D:\research_llm` is the **model/data side** of this project: a fine-tune pipeline for **Nishu**, a Hinglish phone assistant built on Qwen3-0.6B (GGUF Q4_K_M, `n_ctx` 1024, thinking off — tested so far with llama.cpp, which is the training-side test harness, not an app-side commitment). It contains 6,212 training conversations, a training notebook, and ~20 research notes. It contains **zero Android files** — verified by sweeping for `*.kt`, `*.gradle`, `AndroidManifest.xml`, `*.java`.
+`D:\nishant\llm_research` is the **model/data side** of this project: a fine-tune pipeline for **Nishu**, a Hinglish phone assistant built on Qwen3-0.6B (GGUF Q4_K_M, `n_ctx` 1024, thinking off — tested so far with llama.cpp, which is the training-side test harness, not an app-side commitment). It contains 6,212 training conversations, a training notebook, and ~20 research notes. It contains **zero Android files** — verified by sweeping for `*.kt`, `*.gradle`, `AndroidManifest.xml`, `*.java`.
 
 This plan builds the Android app, which does not exist yet. Two facts from the repo shape it:
 
@@ -94,10 +94,10 @@ Other contract facts (from `dataset_builder.py:95-112`, `:955-957`, and the data
 
 ## Project layout
 
-New repo at `D:\nishu-android\`, separate from `D:\research_llm` (which stays untouched; it is read as the source of truth for fixtures).
+The app lives in this repo (`D:\nishant\ai-app\`) as the `app/` module next to `docs/`. The model repo `D:\nishant\llm_research` stays untouched; it is read as the source of truth for fixtures.
 
 ```
-D:\nishu-android\
+D:\nishant\ai-app\
 ├── .gitattributes                  # app/src/main/assets/** -text -diff
 ├── third_party\llama.cpp\          # git submodule, PINNED tag
 ├── tools\
@@ -144,7 +144,7 @@ Side-load the GGUF to `filesDir/models/llm/` via `adb push`. Call `loadModel(pat
 **Verify:** handle != 0, and `adb shell dumpsys meminfo com.nishu.app` TOTAL PSS **< 500 MB** (the release gate from `reports:133`). If it fails here, reduce `n_ctx` before building anything else.
 
 ### 4. Prompt bytes match training — the critical step
-1. `tools/extract_system_prompt.py` reads `D:\research_llm\data\v2\final\train.jsonl` line 1, writes `assets/system_prompt.bin` with LF endings, and **asserts length 1024 + sha256 `0d30a62b…`**. It must not read `sys_test.txt`.
+1. `tools/extract_system_prompt.py` reads `D:\nishant\llm_research\data\v2\final\train.jsonl` line 1, writes `assets/system_prompt.bin` with LF endings, and **asserts length 1024 + sha256 `0d30a62b…`**. It must not read `sys_test.txt`.
 2. `tools/render_golden_prompts.py` loads the Qwen3-0.6B tokenizer in `transformers` and calls `apply_chat_template(..., add_generation_prompt=True, enable_thinking=False)` on ~8 rows covering: plain chat, summarization, a full `system,user,assistant,tool,assistant` tool row, multi-turn `phone_followup`, and identity. Emits `.prompt.bin` + `.tokens.json` fixtures.
 3. `PromptBytesTest` (instrumented, on-device) asserts **byte equality** for each, and separately asserts `LlamaBridge.tokenize()` IDs equal the golden token IDs — byte equality alone can hide an `addSpecial` mistake.
 4. Log the real `systemPrefixTokenCount` and record it.
@@ -228,7 +228,7 @@ A debug-only screen that runs a fixed suite over the current engine and writes o
 
 The last two are **the deciding metrics and they are meaningless until the fine-tune exists** — on stock Qwen3-0.6B they measure nothing. Run the suite for real after training; until then it establishes the speed/memory baseline and proves the harness works.
 
-**The fixed suite** must come from held-out data, not ad-hoc prompts: ~20 rows sampled from `D:\research_llm\data\v2\final\test.jsonl` spanning `hinglish_qa`, `english_chat`, `summarization`, `tool_call`, and `decline`, plus one long map-reduce run. Same rows for every engine, or the comparison means nothing.
+**The fixed suite** must come from held-out data, not ad-hoc prompts: ~20 rows sampled from `D:\nishant\llm_research\data\v2\final\test.jsonl` spanning `hinglish_qa`, `english_chat`, `summarization`, `tool_call`, and `decline`, plus one long map-reduce run. Same rows for every engine, or the comparison means nothing.
 
 ### Later: `ExecuTorchEngine` (post-training, not V0.1)
 Sequenced after `nishu-Q4_K_M.gguf` is trained and validated. Work involved, so the cost is visible: export the fine-tuned checkpoint to `.pte`, lower for XNNPACK (CPU baseline) and then **Qualcomm QNN** (the actual prize on your Snapdragon), implement `PromptTemplate` rendering against ExecuTorch's tokenizer, and pass step 4's golden byte/token test before any number it produces is believed. Expect the QNN path to constrain quantization — NPU backends typically want their own scheme rather than Q4_K_M, which is itself part of what the benchmark should reveal.

@@ -2,7 +2,7 @@
 
 Research aur planning for the **Nishu** Android app: a local-first Hinglish conversation recorder that transcribes on-device and extracts a summary, tasks and decisions — no cloud.
 
-The model/data side lives in a separate repo at `D:\research_llm` (fine-tune pipeline, 6,212 training conversations, ~20 research notes). This repo is the app. These docs are the bridge between them.
+The model/data side lives in a separate repo at `D:\nishant\llm_research` (fine-tune pipeline, 6,212 training conversations, ~20 research notes). This repo is the app. These docs are the bridge between them.
 
 ## Files
 
@@ -16,7 +16,7 @@ The model/data side lives in a separate repo at `D:\research_llm` (fine-tune pip
 ## Where things are
 
 ```
-D:\research_llm\                  model/data side (separate repo, read-only from here)
+D:\nishant\llm_research\          model/data side (separate repo, read-only from here)
 ├── HANDOFF.md                    project charter; "Pakke faisle" = settled decisions
 ├── dataset_builder.py            system prompt (:95-112), tool schemas, validators
 ├── data\v2\final\train.jsonl     6,212 rows; line 1 holds the canonical system prompt
@@ -26,7 +26,7 @@ D:\research_llm\                  model/data side (separate repo, read-only from
 ├── research_notes\               14 raw evidence notes
 └── llama_bin\qwen3-0.6b-Q4_K_M.gguf       stock untuned model; what V0.1 builds against
 
-D:\nishu-android\                 this repo (the app)
+D:\nishant\ai-app\                this repo (the app)
 └── docs\                         you are here
 ```
 
