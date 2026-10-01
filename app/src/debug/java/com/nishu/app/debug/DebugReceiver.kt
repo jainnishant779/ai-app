@@ -1,9 +1,19 @@
 package com.nishu.app.debug
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.nishu.app.AppGraph
 import com.nishu.app.llm.ChatMessage
 import com.nishu.app.llm.DeviceProfile
@@ -23,51 +33,71 @@ import kotlinx.coroutines.launch
  *   reprocess:  am broadcast -a com.nishu.app.DEBUG_REPROCESS -n com.nishu.app/.debug.DebugReceiver --es ids 12,15
  *   benchmark:  am broadcast -a com.nishu.app.DEBUG_BENCH     -n com.nishu.app/.debug.DebugReceiver [--ei threads 4 --ei batch 4 --ei runs 3]
  *               results are logged under the tag NishuBench.
+ *
+ * The benchmark runs as a foreground worker: a broadcast receiver that takes longer than a few seconds is killed as an ANR.
  */
 class DebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val pending = goAsync()
-        CoroutineScope(Dispatchers.Default).launch {
-            try {
-                when (intent.action) {
-                    "com.nishu.app.DEBUG_REPROCESS" -> reprocess(intent)
-                    "com.nishu.app.DEBUG_BENCH" -> bench(context, intent)
+        when (intent.action) {
+            "com.nishu.app.DEBUG_REPROCESS" -> {
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.Default).launch {
+                    try {
+                        val ids = buildList {
+                            if (intent.hasExtra("id")) add(intent.getLongExtra("id", -1))
+                            intent.getStringExtra("ids")?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.let(::addAll)
+                        }.filter { it > 0 }
+                        for (id in ids) {
+                            Log.i("NishuDebug", "reprocess $id")
+                            AppGraph.conversations.retryProcessing(id)
+                        }
+                    } finally {
+                        pending.finish()
+                    }
                 }
-            } catch (e: Throwable) {
-                Log.e("NishuBench", "debug command failed", e)
-            } finally {
-                pending.finish()
+            }
+            "com.nishu.app.DEBUG_BENCH" -> {
+                val data = workDataOf(
+                    "threads" to intent.getIntExtra("threads", -1),
+                    "batch" to intent.getIntExtra("batch", -1),
+                    "runs" to intent.getIntExtra("runs", 3),
+                )
+                WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<BenchWorker>().setInputData(data).build())
             }
         }
     }
+}
 
-    private suspend fun reprocess(intent: Intent) {
-        val ids = buildList {
-            if (intent.hasExtra("id")) add(intent.getLongExtra("id", -1))
-            intent.getStringExtra("ids")?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.let(::addAll)
-        }.filter { it > 0 }
-        for (id in ids) {
-            Log.i("NishuDebug", "reprocess $id")
-            AppGraph.conversations.retryProcessing(id)
-        }
+/** Cold prefill and greedy decode speed with the real model, plus which CPU instruction set ggml chose. */
+class BenchWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val nm = applicationContext.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("bench", "Benchmark", NotificationManager.IMPORTANCE_LOW))
+        val n = NotificationCompat.Builder(applicationContext, "bench").setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle("Nishu benchmark").setOngoing(true).build()
+        return ForegroundInfo(2003, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
-    /** Cold prefill and greedy decode speed with the real model, plus which CPU instruction set ggml chose. */
-    private suspend fun bench(context: Context, intent: Intent) {
+    override suspend fun doWork(): Result {
+        runCatching { setForeground(getForegroundInfo()) }
         val profile = DeviceProfile.read()
-        val threads = intent.getIntExtra("threads", profile.decodeThreads)
-        val batch = intent.getIntExtra("batch", profile.batchThreads)
-        val runs = intent.getIntExtra("runs", 3)
+        val threads = inputData.getInt("threads", -1).takeIf { it > 0 } ?: profile.decodeThreads
+        val batch = inputData.getInt("batch", -1).takeIf { it > 0 } ?: profile.batchThreads
+        val runs = inputData.getInt("runs", 3)
         Log.i("NishuBench", "device=${profile.soc} cores=${profile.totalCores} big=${profile.bigCores} threads=$threads batch=$batch")
-        Log.i("NishuBench", "cpu=" + LlamaBridge.systemInfo().lineSequence().firstOrNull { "CPU" in it || "NEON" in it }?.trim())
-        val info = ModelInfo(context)
-        val prompt = context.assets.open("system_prompt.bin").use { it.readBytes() }
+        Log.i("NishuBench", "cpu features: " + LlamaBridge.systemInfo().lineSequence().joinToString(" ").take(300))
+        val info = ModelInfo(applicationContext)
+        val prompt = applicationContext.assets.open("system_prompt.bin").use { it.readBytes() }
         // Exclusive: no pipeline may be running a speech model or the LLM while we measure.
         EngineHolder.exclusively {
             repeat(runs) { i ->
                 LlamaCppEngine.load(info.file, prompt, nCtx = 1024, nThreads = threads, nThreadsBatch = batch, prefixCache = null).use { engine ->
                     val warm = engine.warmPrefix()
-                    val r = engine.generate(listOf(ChatMessage(Role.USER, "Namaste, aap kaun ho aur kya kar sakte ho?")), SamplerProfile.Greedy, 64)
+                    // A long answer, so decode speed is averaged over many tokens rather than a 12-token reply.
+                    val r = engine.generate(
+                        listOf(ChatMessage(Role.USER, "Explain step by step how a petrol car engine works, in detail.")),
+                        SamplerProfile.Greedy, 96,
+                    )
                     Log.i(
                         "NishuBench",
                         "run ${i + 1}/$runs: prefill ${warm.prefixTokens} tok in ${warm.millis} ms (${warm.prefixTokens * 1000 / warm.millis.coerceAtLeast(1)} tok/s) | " +
@@ -77,5 +107,6 @@ class DebugReceiver : BroadcastReceiver() {
             }
         }
         Log.i("NishuBench", "done")
+        return Result.success()
     }
 }
