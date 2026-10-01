@@ -6,18 +6,5 @@
  {
   "role": "user",
   "content": "Fixed deposit me 100000 jama kiye 7.2% annual return par, ek saal baad interest kitna milega?"
- },
- {
-  "role": "assistant",
-  "content": "",
-  "tool_calls": [
-   {
-    "type": "function",
-    "function": {
-     "name": "calculator",
-     "arguments": "{\"expression\": \"100000 * 0.072\"}"
-    }
-   }
-  ]
  }
 ]

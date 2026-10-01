@@ -71,7 +71,8 @@ def main():
     tool_row = first(rows, lambda r: roles(r) == ["system", "user", "assistant", "tool", "assistant"])
     picks.append(("tool_call_prompt", tool_row["messages"][:2]))
     picks.append(("tool_call_with_result", tool_row["messages"][:4]))
-    picks.append(("tool_call_no_result", first(rows, lambda r: roles(r) == ["system", "user", "assistant"] and has_tool_calls(r))["messages"][:3]))
+    # A row that ends on the tool call: the real prompt is still just up to the user turn.
+    picks.append(("tool_call_no_result", first(rows, lambda r: roles(r) == ["system", "user", "assistant"] and has_tool_calls(r))["messages"][:2]))
     multi = first(rows, lambda r: len(user_texts(r)) >= 2 and roles(r)[-1] == "assistant")
     last_user = max(i for i, m in enumerate(multi["messages"]) if m["role"] == "user")
     picks.append(("multi_turn", multi["messages"][: last_user + 1]))
