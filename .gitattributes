@@ -9,6 +9,7 @@ app/src/main/assets/** -text -diff
 
 # Golden prompt fixtures are byte-exact ground truth from transformers.
 app/src/androidTest/assets/** -text -diff
+app/src/sharedTest/** -text -diff
 
 # Binary model/grammar artifacts
 *.bin  -text -diff

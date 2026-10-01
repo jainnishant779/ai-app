@@ -33,3 +33,6 @@ benchmarks/
 # OS
 Thumbs.db
 .DS_Store
+
+# Python venv for tools/
+.venv/
