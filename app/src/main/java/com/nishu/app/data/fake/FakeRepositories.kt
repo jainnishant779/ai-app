@@ -58,7 +58,7 @@ class FakeConversationRepository(private val store: FakeStore) : ConversationRep
     }
 
     override suspend fun cancelProcessing(id: Long) = delete(id)
-    override fun audioPath(id: Long): String? = null
+    override suspend fun audioPath(id: Long): String? = null
 
     private fun update(id: Long, f: (ConversationUiModel) -> ConversationUiModel) {
         store.conversations.update { l ->

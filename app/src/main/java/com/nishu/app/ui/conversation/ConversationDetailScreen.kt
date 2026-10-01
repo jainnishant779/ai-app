@@ -177,10 +177,12 @@ fun ConversationDetailScreen(
                                     item { EmptyState(Icons.Rounded.Checklist, "Summary unavailable", "The transcript is still available.") }
                                 } else {
                                     item { SummaryCard(detail.summaryBullets) }
-                                    item { SectionHeader("Key Points", Modifier.padding(top = 8.dp)) }
-                                    item {
-                                        Column(Modifier.fillMaxWidth().nishuCard().padding(horizontal = Dimens.CardPadding, vertical = 8.dp)) {
-                                            detail.keyPoints.forEach { KeyPointRow(it) }
+                                    if (detail.keyPoints.isNotEmpty()) {
+                                        item { SectionHeader("Key Points", Modifier.padding(top = 8.dp)) }
+                                        item {
+                                            Column(Modifier.fillMaxWidth().nishuCard().padding(horizontal = Dimens.CardPadding, vertical = 8.dp)) {
+                                                detail.keyPoints.forEach { KeyPointRow(it) }
+                                            }
                                         }
                                     }
                                     item { LinkRow("View Full Transcript", onTranscript) }
