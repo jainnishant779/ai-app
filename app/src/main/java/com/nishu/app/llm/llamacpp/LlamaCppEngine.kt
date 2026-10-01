@@ -9,7 +9,12 @@ import com.nishu.app.llm.Qwen3PromptTemplate
 import com.nishu.app.llm.SamplerProfile
 import com.nishu.app.llm.ToolCallParser
 import com.nishu.app.llm.WarmResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -68,6 +73,32 @@ class LlamaCppEngine private constructor(
         maxTokens: Int,
         onPiece: ((String) -> Unit)?,
     ): GenerationResult = lock.withLock {
+        coroutineScope {
+            // Native generation cannot see coroutine cancellation, so forward it to the native cancel flag.
+            val watcher = launch {
+                try {
+                    awaitCancellation()
+                } catch (e: CancellationException) {
+                    this@LlamaCppEngine.cancel()
+                    throw e
+                }
+            }
+            try {
+                generateBlocking(messages, mode, grammar, seed, maxTokens, onPiece).also { ensureActive() }
+            } finally {
+                watcher.cancel()
+            }
+        }
+    }
+
+    private suspend fun generateBlocking(
+        messages: List<ChatMessage>,
+        mode: Int,
+        grammar: String?,
+        seed: Int,
+        maxTokens: Int,
+        onPiece: ((String) -> Unit)?,
+    ): GenerationResult =
         withContext(Dispatchers.Default) {
             check(!closed) { "engine closed" }
             val turnTokens = LlamaBridge.tokenize(handle, template.renderTurns(messages))
@@ -93,7 +124,6 @@ class LlamaCppEngine private constructor(
                 decodeTokPerSec = if (tokens > 1) (tokens - 1) * 1_000_000.0 / decodeMicros else 0.0,
             )
         }
-    }
 
     override fun tokenCount(text: String): Int = LlamaBridge.tokenize(handle, text.toByteArray(Charsets.UTF_8)).size
 

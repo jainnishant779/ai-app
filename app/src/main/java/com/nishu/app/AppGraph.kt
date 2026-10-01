@@ -1,6 +1,8 @@
 package com.nishu.app
 
 import android.content.Context
+import com.nishu.app.llm.EngineHolder
+import com.nishu.app.work.Pipeline
 import com.nishu.app.audio.RealRecordingRepository
 import com.nishu.app.audio.RecordingRecovery
 import com.nishu.app.data.QuestionAnswerer
@@ -59,7 +61,9 @@ object AppGraph {
     fun init(context: Context) {
         appContext = context.applicationContext
         database = NishuDatabase.create(appContext)
-        conversations = RoomConversationRepository(database)
+        EngineHolder.init(appContext)
+        onRecorded = { Pipeline.enqueue(appContext, it) }
+        conversations = RoomConversationRepository(database, onCancel = { Pipeline.cancel(appContext, it) })
         memory = RoomMemoryRepository(database, QuestionAnswerer { _, _ -> flowOf("The on-device model is not connected yet.") })
         search = RoomSearchRepository(database)
         recording = RealRecordingRepository(appContext, database)
