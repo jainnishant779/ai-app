@@ -180,3 +180,16 @@ Worth knowing, so an older report isn't cited as current:
 - **Separate router model: proposed, then rejected.** `reports/Tool calling failures in small LLMs.md` recommended splitting routing from generation. The later `On device phone action tools.md:37` reverses it: *"A 100M+-parameter classifier beside a 397MB model breaks the budget"*, the practitioner threshold is ~15 tools, and *"a static, cached, 240-token prefix already delivers the short prompt, and dynamically retrieved tools would defeat the cache."* Later report wins.
 - **`send_message` phasing.** `reports:101` puts it in phase 2, but it **is** in the shipped system prompt and the training data. The data wins.
 - **Embeddings / RAG for semantic memory: rejected on RAM.** No embedding model fits beside the LLM. One practitioner figure is damning for edge RAG: ~1000 tokens of retrieved context can take *"up to 50 seconds"* on target embedded hardware (`architecture_patterns.md:91`). V0.1's Memory "Ask" is FTS retrieval + a single-shot answer, capped at ~400 tokens of context.
+
+---
+
+## V0.1 pinned artifacts (recorded at build start)
+
+| Item | Value |
+|---|---|
+| llama.cpp tag | `b11312` (commit `0c1e57098`), same tag for the desktop binary and the `third_party/llama.cpp` submodule |
+| Base GGUF | `unsloth/Qwen3-0.6B-GGUF` → `Qwen3-0.6B-Q4_K_M.gguf`, 396,705,472 bytes |
+| GGUF sha256 | `AC2D97712095A558E31573F62F466A3F9D93990898B0EC79D7C974C1780D524A` |
+| Local copy | `D:\nishant\llm_research\llama_bin\qwen3-0.6b-Q4_K_M.gguf` (gitignored, never committed) |
+| STT | sherpa-onnx `whisper-tiny.en` (int8 encoder/decoder) + `silero_vad.onnx`, from the k2-fsa `asr-models` release |
+| Desktop smoke test | loads, answers "Namaste, aap kaun ho?" and stops cleanly, with the 1024-byte system prompt and `enable_thinking=false`; about 42 tok/s generation on the desktop CPU |
