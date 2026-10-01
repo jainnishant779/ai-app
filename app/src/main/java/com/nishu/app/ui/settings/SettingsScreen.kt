@@ -170,6 +170,7 @@ fun SettingsScreen(
                                     progress = { (info.storageUsedBytes.toFloat() / info.storageTotalBytes.coerceAtLeast(1)).coerceIn(0f, 1f) },
                                     modifier = Modifier.fillMaxWidth().height(6.dp),
                                     trackColor = MaterialTheme.colorScheme.primaryContainer,
+                                    drawStopIndicator = {},
                                 )
                             }
                         }

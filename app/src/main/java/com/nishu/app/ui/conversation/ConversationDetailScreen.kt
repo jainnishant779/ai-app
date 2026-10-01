@@ -147,6 +147,8 @@ fun ConversationDetailScreen(
                             val count = when (i) { 2 -> detail.tasks.size; 3 -> detail.decisions.size; else -> null }
                             Tab(
                                 selected = tab == i, onClick = { tab = i },
+                                selectedContentColor = MaterialTheme.colorScheme.primary,
+                                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 text = { Text(if (count != null) "$name ($count)" else name, style = MaterialTheme.typography.labelLarge, maxLines = 1) },
                             )
                         }

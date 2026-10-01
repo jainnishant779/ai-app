@@ -84,14 +84,16 @@ fun SearchRoute(onBack: () -> Unit, onOpenConversation: (Long) -> Unit, onOpenMe
 @Composable
 private fun ResultGroup(title: String, hits: List<SearchHit>, query: String, onClick: (SearchHit) -> Unit) {
     val hl = MaterialTheme.colorScheme.primaryContainer
-    Text("$title (${hits.size})", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-    hits.forEach { h ->
-        Column(Modifier.fillMaxWidth().nishuCard().clickable { onClick(h) }.padding(Dimens.CardPadding)) {
-            Text(h.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                highlight(h.snippet, query, hl), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
+    Column(verticalArrangement = Arrangement.spacedBy(Dimens.ItemGap)) {
+        Text("$title (${hits.size})", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+        hits.forEach { h ->
+            Column(Modifier.fillMaxWidth().nishuCard().clickable { onClick(h) }.padding(Dimens.CardPadding)) {
+                Text(h.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    highlight(h.snippet, query, hl), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
