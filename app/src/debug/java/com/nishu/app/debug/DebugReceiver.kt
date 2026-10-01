@@ -61,6 +61,8 @@ class DebugReceiver : BroadcastReceiver() {
                     "threads" to intent.getIntExtra("threads", -1),
                     "batch" to intent.getIntExtra("batch", -1),
                     "runs" to intent.getIntExtra("runs", 3),
+                    "mode" to (intent.getStringExtra("mode") ?: "llm"),
+                    "sttThreads" to (intent.getStringExtra("sttThreads") ?: "1,2,3,4"),
                 )
                 WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<BenchWorker>().setInputData(data).build())
             }
@@ -78,8 +80,37 @@ class BenchWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         return ForegroundInfo(2003, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
+    /** STT on CPU versus NNAPI (the MediaTek APU) with the real model and your longest recording. */
+    private suspend fun sttBench(): Result {
+        val root = java.io.File(applicationContext.filesDir, "models/stt")
+        val wav = java.io.File(applicationContext.filesDir, "recordings").listFiles { f -> f.extension == "wav" }
+            .orEmpty().maxByOrNull { it.length() } ?: return Result.failure()
+        val seconds = (wav.length() - 44) / 32000.0
+        Log.i("NishuBench", "stt bench on ${wav.name} (${"%.1f".format(seconds)} s of audio)")
+        EngineHolder.exclusively {
+            val texts = HashMap<String, String>()
+            val threadCounts = (inputData.getString("sttThreads") ?: "1,2,3,4").split(',').mapNotNull { it.trim().toIntOrNull() }
+            for (n in threadCounts) {
+                val stt = com.nishu.app.stt.SherpaOnnxStt(root, numThreads = n, provider = "cpu")
+                val t0 = System.nanoTime()
+                val out = StringBuilder()
+                val result = runCatching { stt.transcribe(wav) { out.append(it.text).append(' ') } }
+                val ms = (System.nanoTime() - t0) / 1_000_000
+                Log.i(
+                    "NishuBench",
+                    "stt threads=$n: ${if (result.isSuccess) "$ms ms (${"%.2f".format(seconds * 1000 / ms)}x realtime)" else "FAILED ${result.exceptionOrNull()}"}",
+                )
+                if (result.isSuccess) texts["t$n"] = out.toString().trim()
+            }
+            Log.i("NishuBench", "stt text identical across thread counts: ${texts.values.distinct().size <= 1}")
+        }
+        Log.i("NishuBench", "done")
+        return Result.success()
+    }
+
     override suspend fun doWork(): Result {
         runCatching { setForeground(getForegroundInfo()) }
+        if (inputData.getString("mode") == "stt") return sttBench()
         val profile = DeviceProfile.read()
         val threads = inputData.getInt("threads", -1).takeIf { it > 0 } ?: profile.decodeThreads
         val batch = inputData.getInt("batch", -1).takeIf { it > 0 } ?: profile.batchThreads

@@ -131,9 +131,13 @@ class SherpaOnnxStt(
     private fun recognize(recognizer: OfflineRecognizer, samples: FloatArray, durationMs: Long): String? {
         val stream = recognizer.createStream()
         try {
+            val t0 = System.nanoTime()
             stream.acceptWaveform(samples, SAMPLE_RATE)
             recognizer.decode(stream)
-            return SttText.clean(recognizer.getResult(stream).text, durationMs)
+            val raw = recognizer.getResult(stream).text
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            android.util.Log.i("NishuStt", "segment ${durationMs} ms of audio -> decode $ms ms, ${raw.length} chars")
+            return SttText.clean(raw, durationMs)
         } finally {
             stream.release()
         }

@@ -193,3 +193,24 @@ Worth knowing, so an older report isn't cited as current:
 | Local copy | `D:\nishant\llm_research\llama_bin\qwen3-0.6b-Q4_K_M.gguf` (gitignored, never committed) |
 | STT | sherpa-onnx `whisper-tiny.en` (int8 encoder/decoder) + `silero_vad.onnx`, from the k2-fsa `asr-models` release |
 | Desktop smoke test | loads, answers "Namaste, aap kaun ho?" and stops cleanly, with the 1024-byte system prompt and `enable_thinking=false`; about 42 tok/s generation on the desktop CPU |
+
+---
+
+## Hardware acceleration, as measured (2026-10-01, Motorola Edge 60 Fusion / MT6878)
+
+### CPU first, picked per device at runtime
+llama.cpp `b11312` is built with `GGML_BACKEND_DL` + `GGML_CPU_ALL_VARIANTS`: seven CPU backends (armv8.0 .. armv9.2) ship in one APK and ggml loads the fastest one the phone supports. On this phone that is `DOTPROD + FP16`; prefill went 47 -> 168 tok/s. Threads come from the number of big cores (`DeviceProfile`), because adding little cores made it slower (see OPEN-QUESTIONS).
+
+### NNAPI: dropped
+NNAPI is deprecated since Android 15, is not an LLM runtime, and gave **no speed-up** for whisper on this phone (68.7 s vs 71.2 s, identical output). The sherpa-onnx provider option stays CPU. Do not revisit unless the platform changes.
+
+### NPU/GPU for the LLM: not now
+- MediaTek NPU needs NeuroPilot (proprietary); llama.cpp cannot use it.
+- Mali Vulkan: not attempted; a 0.6B Q4_K_M model on a dot-product CPU is usually as fast.
+- The path for NPU stays **ExecuTorch + Qualcomm QNN on Snapdragon phones, after the fine-tune exists**, benchmarked with the same golden-prompt test and `bench_suite`. MLC for GPU behind it. `LLMEngine` already isolates this.
+
+### STT model
+`Oriserve/Whisper-Hindi2Hinglish-Swift` (whisper-base fine-tune, Apache-2.0), converted to sherpa-onnx int8 with `tools/convert_hinglish_whisper.py` (29 MB encoder + 131 MB decoder). On real Hinglish recordings it replaces `tiny.en`'s "(speaking in foreign language)" with Roman Hinglish, and beats `small lang=en` (357 MB) on meaning. `tiny.en` stays as the fallback if the files are absent.
+
+### Speaker identification
+pyannote-segmentation-3.0 (1.5 MB int8) + 3D-Speaker CAM++ zh/en (27 MB), clustering threshold **0.8** (0.5 over-splits one voice into 3-4 people on the sample audio). Recordings over 30 minutes skip it. Speech segments are split at speaker changes and each part is transcribed separately.

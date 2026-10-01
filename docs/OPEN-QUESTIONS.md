@@ -19,6 +19,19 @@ Device: Motorola Edge 60 Fusion, MediaTek MT6878 (Dimensity 7400), 7.6 GB RAM, A
 | Grammar | `tool_call.gbnf` forced a valid `set_timer` call on the untuned model; the parser reads it. |
 | **Q1 Memory** | **500 MB gate MISSED: 638 MB PSS** (726 MB RSS) with the model loaded and one generation done. |
 
+**Update, same phone, after the per-CPU build and the Hinglish/speaker work:**
+
+| Measurement | Result |
+|---|---|
+| llama.cpp CPU variant chosen at runtime | `DOTPROD + FP16_VA` (`android_armv8.2_2`). The earlier generic build had neither |
+| LLM prefill (299 tok) | **~168 tok/s** (was 47 tok/s): 3.6x |
+| LLM decode (96-token answer) | **~20 tok/s** (was ~15) |
+| Threads, LLM (decode/prefill) | 4/4 best (168 / 20). 3/3: 123 / 20. 4/6: 123 / 20. 6/6: 89 / 15. Little cores hurt, so threads = big-core count |
+| STT, Hinglish whisper-base int8 | 33.8 s of audio in **~14.5 s (2.3x realtime)**; 1 thread 18 s, so threads barely help |
+| STT on NNAPI (MediaTek APU) | no gain: 68.7 s vs 71.2 s CPU, identical text (both inflated by post-install dexopt) |
+
+**Measure only after the phone has settled.** Right after `adb install`, Android compiles the app in the background and CPU-bound numbers come out 3-5x too slow (STT 67 s vs a real 15 s; LLM warm-up prefill 20 s). Wait a couple of minutes, or run once and discard.
+
 PSS breakdown (KB): private-other 384,980 (the mmapped GGUF), native-heap 112,692 (KV ~60 MB + compute buffers), code 122,520, java-heap 10,248, system 7,618, swap 30,780.
 
 The weights alone (~385 MB) plus KV and buffers (~113 MB) already reach ~500 MB, so lowering `n_ctx` cannot close the gap. The weights are clean file-backed pages the OS can reclaim, so anonymous memory (native heap + java heap, ~125 MB) may be the better metric. **The gate needs a decision**; until then `MemoryGate` uses a 700 MB regression ceiling.
