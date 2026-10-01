@@ -77,7 +77,7 @@ data class TranscriptUiState(
 
 class TranscriptViewModel(
     private val id: Long,
-    conversations: ConversationRepository,
+    private val conversations: ConversationRepository,
     private val memory: MemoryRepository,
     val player: AudioPlayer,
 ) : ViewModel() {
@@ -88,6 +88,7 @@ class TranscriptViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranscriptUiState())
 
     fun setQuery(q: String) { query.value = q }
+    fun renameSpeaker(label: String, name: String) = viewModelScope.launch { conversations.renameSpeaker(id, label, name) }
     fun saveToMemory(text: String, kind: com.nishu.app.domain.model.MemoryKind, startMs: Long?) =
         viewModelScope.launch { memory.add(text, kind, id, startMs) }
 
@@ -108,6 +109,7 @@ fun TranscriptRoute(id: Long, onBack: () -> Unit) {
         state = state, player = player, envelope = envelope, onBack = onBack,
         onQuery = vm::setQuery, onSeek = vm.player::seekTo, onPlayPause = { if (player.isPlaying) vm.player.pause() else vm.player.play() },
         onSpeed = vm.player::cycleSpeed, onSave = vm::saveToMemory,
+        onRenameSpeaker = vm::renameSpeaker,
     )
 }
 
@@ -123,8 +125,10 @@ fun TranscriptScreen(
     onPlayPause: () -> Unit,
     onSpeed: () -> Unit,
     onSave: (String, com.nishu.app.domain.model.MemoryKind, Long?) -> Unit,
+    onRenameSpeaker: (String, String) -> Unit = { _, _ -> },
 ) {
     var saving by remember { mutableStateOf<TranscriptLine?>(null) }
+    var renaming by remember { mutableStateOf<com.nishu.app.domain.model.SpeakerRef?>(null) }
     val highlightColor = MaterialTheme.colorScheme.primaryContainer
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = Dimens.ContentMaxWidth).fillMaxSize()) {
@@ -141,6 +145,15 @@ fun TranscriptScreen(
                 items(state.lines, key = { it.startMs }) { line ->
                     val active = state.hasAudio && player.positionMs >= line.startMs &&
                         state.lines.firstOrNull { it.startMs > line.startMs }?.let { player.positionMs < it.startMs } != false
+                    val previous = state.lines.getOrNull(state.lines.indexOf(line) - 1)
+                    // Consecutive lines by the same person share one chip, like a chat transcript.
+                    if (line.speaker != null && line.speaker.label != previous?.speaker?.label) {
+                        com.nishu.app.ui.components.SpeakerChip(
+                            line.speaker.name, line.speaker.index,
+                            Modifier.padding(start = 64.dp, bottom = 4.dp),
+                            onClick = { renaming = line.speaker },
+                        )
+                    }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -187,6 +200,12 @@ fun TranscriptScreen(
                 }
             }
         }
+    }
+    renaming?.let { ref ->
+        com.nishu.app.ui.components.TextInputDialog(
+            "Rename speaker", ref.name, "Save",
+            { onRenameSpeaker(ref.label, it); renaming = null }, { renaming = null },
+        )
     }
     saving?.let { line ->
         AddFactSheet(line.text, { text, kind -> onSave(text, kind, line.startMs); saving = null }, { saving = null })

@@ -19,6 +19,8 @@ import com.nishu.app.domain.model.ProcessingStage
 import com.nishu.app.llm.EngineHolder
 import com.nishu.app.llm.ModelMissingException
 import com.nishu.app.stt.SherpaOnnxStt
+import com.nishu.app.stt.SpeakerDiarizer
+import com.nishu.app.stt.SpeakerTurns
 import com.nishu.app.stt.SttModelMissing
 import com.nishu.app.summarize.MapReduceSummarizer
 import kotlinx.coroutines.CancellationException
@@ -64,11 +66,22 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             db.conversations().setStatus(id, "FAILED", ProcessingStage.TRANSCRIBING.name, "Audio file is missing")
             return Result.failure()
         }
-        val stt = SherpaOnnxStt(File(applicationContext.filesDir, "models/stt"))
+        val sttRoot = File(applicationContext.filesDir, "models/stt")
+        val stt = SherpaOnnxStt(sttRoot)
         return try {
             db.transcripts().clear(id)
-            stt.transcribe(audio, onProgress = { setProgressAsync(workDataOf("p" to it)) }) { seg ->
-                db.transcripts().insert(TranscriptSegmentEntity(conversationId = id, startMs = seg.startMs, endMs = seg.endMs, text = seg.text))
+            // Who spoke when first; the diarizer is released before recognition starts, so the models are never resident together.
+            val turns = runCatching { SpeakerDiarizer(sttRoot).diarize(audio) }
+                .onFailure { Log.w(TAG, "speaker identification skipped", it) }
+                .getOrDefault(emptyList())
+            Log.i(TAG, "diarization: ${turns.map { it.speaker }.distinct().size} speaker(s), ${turns.size} turn(s)")
+            stt.transcribe(audio, onProgress = { setProgressAsync(workDataOf("p" to it)) }, speakerTurns = turns) { seg ->
+                db.transcripts().insert(
+                    TranscriptSegmentEntity(
+                        conversationId = id, startMs = seg.startMs, endMs = seg.endMs, text = seg.text,
+                        speakerLabel = SpeakerTurns.label(seg.speaker),
+                    ),
+                )
             }
             db.conversations().get(id)?.let { db.conversations().update(it.copy(sttModelId = stt.modelId)) }
             db.conversations().setStatus(id, "TRANSCRIBED", null)

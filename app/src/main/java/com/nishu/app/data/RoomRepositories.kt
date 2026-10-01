@@ -4,6 +4,7 @@ import com.nishu.app.data.db.ConversationEntity
 import com.nishu.app.data.db.DecisionEntity
 import com.nishu.app.data.db.MemoryFactEntity
 import com.nishu.app.data.db.NishuDatabase
+import com.nishu.app.data.db.SpeakerNameEntity
 import com.nishu.app.data.db.SummaryEntity
 import com.nishu.app.data.db.TaskEntity
 import com.nishu.app.domain.model.*
@@ -19,6 +20,8 @@ import java.io.File
 
 private inline fun <reified E : Enum<E>> enumOr(name: String?, default: E): E =
     enumValues<E>().firstOrNull { it.name == name } ?: default
+
+fun defaultSpeakerName(label: String) = "Speaker ${label.drop(1)}"
 
 private fun confidence(raw: String) = if (raw == "MODEL_JSON") Confidence.HIGH else Confidence.LOW
 
@@ -51,10 +54,20 @@ class RoomConversationRepository(
     override fun all(category: ConversationCategory?) =
         uiModels.map { list -> list.filter { category == null || it.category == category } }
 
+    /** Transcript lines with speakers resolved to their display names. */
+    private fun lines(id: Long): Flow<List<TranscriptLine>> =
+        combine(db.transcripts().observe(id), db.speakers().observe(id)) { segments, names ->
+            val custom = names.associate { it.label to it.name }
+            segments.map { s ->
+                val ref = s.speakerLabel?.let { SpeakerRef(it, custom[it]?.takeIf { n -> n.isNotBlank() } ?: defaultSpeakerName(it)) }
+                TranscriptLine(s.startMs, s.text, ref)
+            }
+        }
+
     override fun detail(id: Long): Flow<ConversationDetail?> = combine(
         db.conversations().observe(id), db.summaries().observe(id), db.tasks().observe(id),
-        db.decisions().observe(id), db.transcripts().observe(id),
-    ) { conv, summary, tasks, decisions, segments ->
+        db.decisions().observe(id), lines(id),
+    ) { conv, summary, tasks, decisions, lines ->
         conv?.let {
             val bullets = summary?.bulletsText?.lines()?.map { l -> l.trim().trimStart('-', '*', '•').trim() }
                 ?.filter { l -> l.isNotEmpty() }.orEmpty()
@@ -64,14 +77,18 @@ class RoomConversationRepository(
                 keyPoints = emptyList(),
                 tasks = tasks.map { t -> TaskUiModel(t.id, t.text, t.dueHint, t.done, confidence(t.extractionConfidence)) },
                 decisions = decisions.map { d -> DecisionUiModel(d.id, d.text, confidence(d.extractionConfidence)) },
-                transcriptPreview = segments.take(3).map { s -> TranscriptLine(s.startMs, s.text) },
+                transcriptPreview = lines.take(3),
                 statusDetail = it.statusDetail,
                 hasAudio = !it.audioDeleted && it.audioPath != null,
             )
         }
     }
 
-    override fun transcript(id: Long) = db.transcripts().observe(id).map { l -> l.map { TranscriptLine(it.startMs, it.text) } }
+    override fun transcript(id: Long) = lines(id)
+
+    override suspend fun renameSpeaker(id: Long, label: String, name: String) {
+        if (name.isBlank()) db.speakers().clear(id, label) else db.speakers().upsert(SpeakerNameEntity(id, label, name.trim()))
+    }
 
     override fun processing(id: Long): Flow<Map<ProcessingStage, StepState>> = db.conversations().observe(id).map { c ->
         val stages = ProcessingStage.entries

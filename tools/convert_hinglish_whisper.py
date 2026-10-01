@@ -68,6 +68,9 @@ def patched_exporter() -> Path:
         "    elif name == \"medium-aishell\":",
         f"    elif name == \"{NAME}\":\n        return whisper.load_model(\"{PT.as_posix()}\")\n    elif name == \"medium-aishell\":",
     )
+    # Current PyTorch defaults to the dynamo exporter; sherpa's script (dynamic_axes, external caches) targets the
+    # TorchScript one, which is still available with dynamo=False.
+    src = src.replace("opset_version=opset_version,", "opset_version=opset_version,\n        dynamo=False,")
     out = ROOT / "export-onnx-patched.py"
     out.write_text(src)
     return out

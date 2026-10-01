@@ -1,6 +1,7 @@
 package com.nishu.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,6 +84,28 @@ fun memoryStyle(kind: MemoryKind): TileStyle = when (kind) {
     MemoryKind.PREFERENCE -> TileStyle(Icons.Rounded.Favorite, Color(0xFFE0568A))
     MemoryKind.CONTACT -> TileStyle(Icons.Rounded.ContactPhone, Color(0xFF22A860))
     MemoryKind.OTHER -> TileStyle(Icons.Rounded.AutoAwesome, Color(0xFF8B5CF6))
+}
+
+private val speakerPalette = listOf(Color(0xFF635BFF), Color(0xFF14A38B), Color(0xFFE08A2E), Color(0xFFE0568A), Color(0xFF4F8CFF), Color(0xFF8B5CF6))
+
+/** A speaker keeps the same colour on every screen: the palette is indexed by the speaker's number. */
+fun speakerColor(index: Int): Color = speakerPalette[index.coerceAtLeast(0) % speakerPalette.size]
+
+@Composable
+fun SpeakerChip(name: String, index: Int, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val color = speakerColor(index)
+    Row(
+        modifier
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.14f))
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Rename speaker", onClick = onClick) else Modifier)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(6.dp))
+        Text(name, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+    }
 }
 
 @Composable

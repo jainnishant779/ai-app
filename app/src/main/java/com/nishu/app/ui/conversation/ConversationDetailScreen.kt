@@ -213,7 +213,10 @@ fun ConversationDetailScreen(
                                         item {
                                             Row(Modifier.fillMaxWidth().nishuCard().padding(Dimens.CardPadding)) {
                                                 Text(formatClock(line.startMs), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 12.dp))
-                                                Text(line.text, style = MaterialTheme.typography.bodyMedium)
+                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    line.speaker?.let { com.nishu.app.ui.components.SpeakerChip(it.name, it.index) }
+                                                    Text(line.text, style = MaterialTheme.typography.bodyMedium)
+                                                }
                                             }
                                         }
                                     }

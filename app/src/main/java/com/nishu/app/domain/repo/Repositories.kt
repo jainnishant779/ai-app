@@ -12,6 +12,8 @@ interface ConversationRepository {
     fun transcript(id: Long): Flow<List<TranscriptLine>>
     fun processing(id: Long): Flow<Map<ProcessingStage, StepState>>
     suspend fun setTaskDone(taskId: Long, done: Boolean)
+    /** Gives a diarized speaker a name; a blank name restores the default "Speaker N". */
+    suspend fun renameSpeaker(id: Long, label: String, name: String)
     suspend fun setCategory(id: Long, category: ConversationCategory)
     suspend fun rename(id: Long, title: String)
     suspend fun deleteAudio(id: Long)

@@ -27,7 +27,28 @@ def whisper(dirpath: Path, prefix: str, lang: str, int8: bool = True):
     return cfg
 
 
+SWIFT = Path(r"D:\nishant\toolchain\convert\out\hinglish-swift")
+
+
+def preprocess(x: np.ndarray) -> np.ndarray:
+    """Same as the app's AudioPreprocessor: 80 Hz one-pole high-pass, then one gain (90th-percentile frame -> -20 dB)."""
+    a = (1 / (2 * np.pi * 80)) / ((1 / (2 * np.pi * 80)) + 1 / 16000)
+    y = np.empty_like(x)
+    px = py = 0.0
+    for i, v in enumerate(x):
+        py = a * (py + v - px)
+        px = v
+        y[i] = py
+    fr = x[: len(x) // 400 * 400].reshape(-1, 400)
+    db = 10 * np.log10(np.mean(fr ** 2, axis=1) + 1e-12)
+    gain_db = float(np.clip(-20 - np.percentile(db, 90), -6, 18))
+    return np.clip(y * 10 ** (gain_db / 20), -0.98, 0.98).astype(np.float32)
+
+
 CONFIGS = {
+    "hinglish-swift lang=en": lambda: whisper(SWIFT, "hinglish-swift", "en"),
+    "hinglish-swift lang=en +filter": lambda: whisper(SWIFT, "hinglish-swift", "en"),
+    "hinglish-swift lang=hi": lambda: whisper(SWIFT, "hinglish-swift", "hi"),
     "tiny.en (current)": lambda: whisper(TINY / "sherpa-onnx-whisper-tiny.en", "tiny.en", "en"),
     "base  lang=hi": lambda: whisper(EVAL / "sherpa-onnx-whisper-base", "base", "hi"),
     "base  lang=en": lambda: whisper(EVAL / "sherpa-onnx-whisper-base", "base", "en"),
@@ -86,8 +107,18 @@ def main():
     wavs = [w for w in wavs if (w.stat().st_size - 44) / 32000 >= 2.5]  # skip near-empty clips
     audio = {w.name: read_wav(w) for w in wavs}
     segs = {n: segments(a) for n, a in audio.items()}
+    filtered = {n: preprocess(a) for n, a in audio.items()}
+    seg_f = {n: segments(a) for n, a in filtered.items()}
+    only = sys.argv[3:] if len(sys.argv) > 3 else None  # optional: config-name substrings to run
     lines = []
     for name, make in CONFIGS.items():
+        if only and not any(o in name for o in only):
+            continue
+        use_filter = "+filter" in name
+        if use_filter:
+            segs_used = seg_f
+        else:
+            segs_used = segs
         t0 = time.time()
         try:
             rec = make()
@@ -97,7 +128,7 @@ def main():
         total_audio = sum(len(a) for a in audio.values()) / 16000
         lines.append(f"## {name}")
         for n in audio:
-            lines.append(f"  [{n}] {transcribe(rec, segs[n])}")
+            lines.append(f"  [{n}] {transcribe(rec, segs_used[n])}")
         lines.append(f"  (decode {time.time() - t0:.1f}s for {total_audio:.0f}s audio)")
         lines.append("")
     text = "\n".join(lines)

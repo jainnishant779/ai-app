@@ -35,7 +35,12 @@ class SherpaOnnxStt(
         return f.absolutePath
     }
 
-    override suspend fun transcribe(wav: File, onProgress: (Float) -> Unit, onSegment: suspend (Seg) -> Unit) {
+    override suspend fun transcribe(
+        wav: File,
+        onProgress: (Float) -> Unit,
+        speakerTurns: List<SpeakerTurn>,
+        onSegment: suspend (Seg) -> Unit,
+    ) {
         val vadPath = need(File(modelRoot, "silero_vad.onnx"))
         val encoder = need(spec.encoder(modelRoot))
         val decoder = need(spec.decoder(modelRoot))
@@ -79,11 +84,11 @@ class SherpaOnnxStt(
                         if (samples.isEmpty()) break
                         vad.acceptWaveform(if (preprocess) pre.process(samples) else samples)
                         done += samples.size
-                        drain(vad, recognizer, onSegment)
+                        drain(vad, recognizer, speakerTurns, onSegment)
                         if (reader.totalSamples > 0) onProgress(done.toFloat() / reader.totalSamples)
                     }
                     vad.flush()
-                    drain(vad, recognizer, onSegment)
+                    drain(vad, recognizer, speakerTurns, onSegment)
                     onProgress(1f)
                 }
             } finally {
@@ -94,28 +99,50 @@ class SherpaOnnxStt(
         }
     }
 
-    private suspend fun drain(vad: Vad, recognizer: OfflineRecognizer, onSegment: suspend (Seg) -> Unit) {
+    private suspend fun drain(
+        vad: Vad,
+        recognizer: OfflineRecognizer,
+        turns: List<SpeakerTurn>,
+        onSegment: suspend (Seg) -> Unit,
+    ) {
         while (!vad.empty()) {
             val seg = vad.front()
             vad.pop()
-            val stream = recognizer.createStream()
-            try {
-                stream.acceptWaveform(seg.samples, SAMPLE_RATE)
-                recognizer.decode(stream)
-                val durationMs = seg.samples.size * 1000L / SAMPLE_RATE
-                val text = SttText.clean(recognizer.getResult(stream).text, durationMs)
-                if (text != null) {
-                    val start = seg.start * 1000L / SAMPLE_RATE
-                    onSegment(Seg(start, start + durationMs, text))
+            val segStartMs = seg.start * 1000L / SAMPLE_RATE
+            val segEndMs = segStartMs + seg.samples.size * 1000L / SAMPLE_RATE
+            // One piece per speaker; without speaker info this is the whole segment, as before.
+            for (piece in SpeakerTurns.split(segStartMs, segEndMs, turns)) {
+                val from = ((piece.startMs - segStartMs) * SAMPLE_RATE / 1000).toInt().coerceIn(0, seg.samples.size)
+                val to = ((piece.endMs - segStartMs) * SAMPLE_RATE / 1000).toInt().coerceIn(from, seg.samples.size)
+                if (to - from < MIN_SAMPLES) continue
+                for (part in SpeechChunks.split(to - from, MAX_WHISPER_SAMPLES)) {
+                    val a = from + part.first
+                    val b = from + part.last + 1
+                    val startMs = segStartMs + a * 1000L / SAMPLE_RATE
+                    val endMs = segStartMs + b * 1000L / SAMPLE_RATE
+                    val samples = if (a == 0 && b == seg.samples.size) seg.samples else seg.samples.copyOfRange(a, b)
+                    val text = recognize(recognizer, samples, endMs - startMs)
+                    if (text != null) onSegment(Seg(startMs, endMs, text, piece.speaker))
                 }
-            } finally {
-                stream.release()
             }
+        }
+    }
+
+    private fun recognize(recognizer: OfflineRecognizer, samples: FloatArray, durationMs: Long): String? {
+        val stream = recognizer.createStream()
+        try {
+            stream.acceptWaveform(samples, SAMPLE_RATE)
+            recognizer.decode(stream)
+            return SttText.clean(recognizer.getResult(stream).text, durationMs)
+        } finally {
+            stream.release()
         }
     }
 
     private companion object {
         const val SAMPLE_RATE = 16_000
         const val WINDOW = 512
+        const val MIN_SAMPLES = SAMPLE_RATE / 4 // under 0.25 s there is nothing to recognize
+        const val MAX_WHISPER_SAMPLES = 28 * SAMPLE_RATE // whisper reads 30 s; stay clear of the edge
     }
 }

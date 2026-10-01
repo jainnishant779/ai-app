@@ -46,6 +46,7 @@ class FakeConversationRepository(private val store: FakeStore) : ConversationRep
         }
     }
 
+    override suspend fun renameSpeaker(id: Long, label: String, name: String) = Unit
     override suspend fun setCategory(id: Long, category: ConversationCategory) = update(id) { it.copy(category = category) }
     override suspend fun rename(id: Long, title: String) = update(id) { it.copy(title = title) }
 

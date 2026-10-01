@@ -87,6 +87,18 @@ data class DecisionEntity(
     val extractionConfidence: String,
 )
 
+/** A user-chosen name for a diarized speaker ("S1" -> "Rahul"). Absent means the default "Speaker 1". */
+@Entity(
+    tableName = "speaker_name",
+    primaryKeys = ["conversationId", "label"],
+    foreignKeys = [ForeignKey(ConversationEntity::class, ["id"], ["conversationId"], onDelete = ForeignKey.CASCADE)],
+)
+data class SpeakerNameEntity(
+    val conversationId: Long,
+    val label: String,
+    val name: String,
+)
+
 @Entity(
     tableName = "memory_fact",
     foreignKeys = [ForeignKey(ConversationEntity::class, ["id"], ["sourceConversationId"], onDelete = ForeignKey.SET_NULL)],

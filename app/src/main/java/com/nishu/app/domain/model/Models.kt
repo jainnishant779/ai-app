@@ -29,7 +29,13 @@ data class ConversationUiModel(
 
 data class HomeCounts(val recordings: Int, val openTasks: Int, val facts: Int)
 
-data class TranscriptLine(val startMs: Long, val text: String)
+/** [label] is the stable key ("S1"); [name] is what to show ("Speaker 1", or whatever the user renamed it to). */
+data class SpeakerRef(val label: String, val name: String) {
+    /** 0-based index used to pick a colour, so a speaker keeps the same colour on every screen. */
+    val index: Int get() = (label.drop(1).toIntOrNull() ?: 1) - 1
+}
+
+data class TranscriptLine(val startMs: Long, val text: String, val speaker: SpeakerRef? = null)
 
 data class TaskUiModel(
     val id: Long,

@@ -123,6 +123,17 @@ interface DecisionDao {
 }
 
 @Dao
+interface SpeakerDao {
+    @androidx.room.Upsert suspend fun upsert(s: SpeakerNameEntity)
+
+    @Query("DELETE FROM speaker_name WHERE conversationId = :id AND label = :label")
+    suspend fun clear(id: Long, label: String)
+
+    @Query("SELECT * FROM speaker_name WHERE conversationId = :id")
+    fun observe(id: Long): Flow<List<SpeakerNameEntity>>
+}
+
+@Dao
 interface MemoryDao {
     @Insert suspend fun insert(f: MemoryFactEntity): Long
 

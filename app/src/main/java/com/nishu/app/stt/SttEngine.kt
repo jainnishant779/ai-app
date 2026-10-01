@@ -2,7 +2,8 @@ package com.nishu.app.stt
 
 import java.io.File
 
-data class Seg(val startMs: Long, val endMs: Long, val text: String)
+/** [speaker] is 0-based by first appearance, or null when there was no speaker information. */
+data class Seg(val startMs: Long, val endMs: Long, val text: String, val speaker: Int? = null)
 
 class SttModelMissing(message: String) : Exception(message)
 
@@ -14,5 +15,10 @@ interface SttEngine {
      * Transcribes a 16 kHz mono PCM16 WAV, emitting one [Seg] per speech segment in order.
      * Silence produces no segments. Releases all native resources before returning.
      */
-    suspend fun transcribe(wav: File, onProgress: (Float) -> Unit = {}, onSegment: suspend (Seg) -> Unit)
+    suspend fun transcribe(
+        wav: File,
+        onProgress: (Float) -> Unit = {},
+        speakerTurns: List<SpeakerTurn> = emptyList(),
+        onSegment: suspend (Seg) -> Unit,
+    )
 }
