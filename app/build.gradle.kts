@@ -77,6 +77,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    // Not on Maven Central: fetched by tools/fetch_sherpa.ps1 into app/libs.
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

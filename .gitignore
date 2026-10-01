@@ -36,3 +36,6 @@ Thumbs.db
 
 # Python venv for tools/
 .venv/
+
+# Large third-party binaries fetched by tools/fetch_sherpa.ps1
+app/libs/*.aar
