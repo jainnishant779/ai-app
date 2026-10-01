@@ -1,0 +1,23 @@
+# Default: let git normalize text files.
+* text=auto
+
+# NEVER normalize anything under assets/ — the system prompt asset is a
+# byte-level contract (sha256 0d30a62b…, 1024 bytes, LF only). A CRLF
+# conversion shifts tokenization at all 11 line boundaries and silently
+# degrades the model. See docs/CONTRACT.md §1.
+app/src/main/assets/** -text -diff
+
+# Golden prompt fixtures are byte-exact ground truth from transformers.
+app/src/androidTest/assets/** -text -diff
+
+# Binary model/grammar artifacts
+*.bin  -text -diff
+*.gguf -text -diff
+*.onnx -text -diff
+*.pte  -text -diff
+*.gbnf -text
+
+# Gradle wrapper
+*.jar  binary
+gradlew      text eol=lf
+gradlew.bat  text eol=crlf
