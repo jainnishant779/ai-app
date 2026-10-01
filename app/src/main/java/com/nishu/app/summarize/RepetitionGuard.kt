@@ -35,16 +35,17 @@ object RepetitionGuard {
             }
             pos = m.range.last + 1
         }
-        // 4-gram repeats within the recent window.
+        // 4-gram repeats: the same 4 words 4+ times within any 64-word span. Cut at the 2nd occurrence so one
+        // natural repeat survives and the rest of the loop is dropped, however long it ran.
         val words = Regex("\\S+").findAll(text).toList()
         if (words.size >= 8) {
-            val window = words.takeLast(64)
-            val counts = HashMap<String, Int>()
-            for (i in 0..window.size - 4) {
-                val gram = (0 until 4).joinToString(" ") { normalize(window[i + it].value) }
-                val n = (counts[gram] ?: 0) + 1
-                counts[gram] = n
-                if (n >= 4) return window[i].range.first
+            val seenAt = HashMap<String, ArrayDeque<Int>>()
+            for (i in 0..words.size - 4) {
+                val gram = (0 until 4).joinToString(" ") { normalize(words[i + it].value) }
+                val at = seenAt.getOrPut(gram) { ArrayDeque() }
+                while (at.isNotEmpty() && at.first() < i - 64) at.removeFirst()
+                at.addLast(i)
+                if (at.size >= 4) return words[at.elementAt(1)].range.first
             }
         }
         return -1

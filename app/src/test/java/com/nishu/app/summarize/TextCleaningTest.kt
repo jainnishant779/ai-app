@@ -3,6 +3,7 @@ package com.nishu.app.summarize
 import com.nishu.app.stt.SttText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TextCleaningTest {
@@ -33,5 +34,10 @@ class TextCleaningTest {
         assertNull(SttText.clean("..."))
         assertEquals("hello there", SttText.clean("hello [pause] there"))
         assertEquals("send the deck", SttText.clean("send the deck ["))
+    }
+
+    @Test
+    fun cleanedTextIsNeverBlank() {
+        assertTrue(listOf("[", "(x)", "***", "  ").all { SttText.clean(it) == null })
     }
 }

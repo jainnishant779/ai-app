@@ -1,13 +1,42 @@
 package com.nishu.app.stt
 
-/** Whisper emits non-speech annotations such as "[BLANK_AUDIO]", "(music)" or a dangling "[". They are not transcript. */
-object SttText {
-    private val closed = Regex("\\[[^\\]]*]|\\([^)]*\\)|\\*[^*]*\\*")
-    private val dangling = Regex("[\\[(*][^\\])*]*$")
+import com.nishu.app.summarize.RepetitionGuard
 
-    /** Returns the cleaned text, or null when nothing speech-like is left. */
-    fun clean(raw: String): String? {
-        val text = raw.replace(closed, " ").replace(dangling, " ").replace(Regex("\\s+"), " ").trim()
-        return text.takeIf { t -> t.any { it.isLetterOrDigit() } }
+/**
+ * Cleans one recognized segment. Whisper emits non-speech annotations ("[Music]", "(speaking in foreign language)"),
+ * repeats itself when unsure, and invents "Thank you." on near-silence. The one thing this must never do is turn
+ * real speech into "nothing": a segment the VAD called speech but the model could not read becomes a placeholder.
+ */
+object SttText {
+    const val UNCLEAR = "[unclear speech]"
+
+    private val annotation = Regex("\\[[^\\]]*]|\\([^)]*\\)|\\*[^*]*\\*")
+    private val dangling = Regex("[\\[(*][^\\])*]*$")
+    /** Annotations that mean "someone is talking but I could not read it" (as opposed to music or silence). */
+    private val unreadableSpeech = Regex("speak|foreign|language|unclear|inaudible|mumbl|crosstalk|indistinct|speech", RegexOption.IGNORE_CASE)
+    private val silenceHallucination = Regex(
+        "^(thank you\\.?|thanks\\.?|thanks for watching\\.?|thank you for watching\\.?|bye\\.?|you|\\.+|okay\\.?|so\\.?)$",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * @param durationMs how long the VAD said speech lasted; short segments are held to a stricter standard.
+     * @return the cleaned text, [UNCLEAR] for speech that could not be read, or null to drop the segment.
+     */
+    fun clean(raw: String, durationMs: Long = Long.MAX_VALUE): String? {
+        val trimmed = raw.trim()
+        val stripped = trimmed.replace(annotation, " ").replace(dangling, " ").replace(Regex("\\s+"), " ").trim()
+        val hasWords = stripped.any { it.isLetterOrDigit() }
+
+        if (!hasWords) {
+            val readable = unreadableSpeech.containsMatchIn(trimmed)
+            return if (readable && durationMs >= UNCLEAR_MIN_MS) UNCLEAR else null
+        }
+        val collapsed = RepetitionGuard.clean(stripped).ifBlank { stripped }
+        if (durationMs < SHORT_MS && silenceHallucination.matches(collapsed)) return null
+        return collapsed
     }
+
+    private const val UNCLEAR_MIN_MS = 1_500L
+    private const val SHORT_MS = 2_000L
 }

@@ -16,19 +16,31 @@ import kotlin.coroutines.coroutineContext
  * Offline whisper over Silero-VAD segments. Offline (not streaming) because transcription runs after the
  * recording stops, and batching whole speech segments is more accurate. VAD is required: whisper hallucinates
  * confidently on silence, and the VAD segments give real timestamps for free.
+ *
+ * @param modelRoot `files/models/stt`
+ * @param spec which whisper model to use; defaults to the best one installed.
+ * @param provider onnxruntime execution provider: "cpu" or "nnapi".
  */
-class SherpaOnnxStt(private val modelDir: File, private val numThreads: Int = 2) : SttEngine {
-    override val modelId = "whisper-tiny.en-int8"
+class SherpaOnnxStt(
+    private val modelRoot: File,
+    private val spec: SttModelSpec = SttModelSpec.select(modelRoot),
+    private val numThreads: Int = 4,
+    private val provider: String = "cpu",
+    private val preprocess: Boolean = true,
+) : SttEngine {
+    override val modelId = spec.id
 
-    private fun model(name: String) = File(modelDir, name).also {
-        if (!it.exists()) throw SttModelMissing("missing STT model file: ${it.path} (run tools/push_models.ps1)")
-    }.absolutePath
+    private fun need(f: File): String {
+        if (!f.exists()) throw SttModelMissing("missing STT model file: ${f.path} (run tools/push_models.ps1)")
+        return f.absolutePath
+    }
 
     override suspend fun transcribe(wav: File, onProgress: (Float) -> Unit, onSegment: suspend (Seg) -> Unit) {
-        val vadPath = model("silero_vad.onnx")
-        val encoder = model("tiny.en-encoder.int8.onnx")
-        val decoder = model("tiny.en-decoder.int8.onnx")
-        val tokens = model("tiny.en-tokens.txt")
+        val vadPath = need(File(modelRoot, "silero_vad.onnx"))
+        val encoder = need(spec.encoder(modelRoot))
+        val decoder = need(spec.decoder(modelRoot))
+        val tokens = need(spec.tokens(modelRoot))
+        val gain = if (preprocess) AudioPreprocessor.measureGain(wav) else 1f
 
         withContext(Dispatchers.Default) {
             val vad = Vad(null, VadModelConfig().apply {
@@ -48,14 +60,15 @@ class SherpaOnnxStt(private val modelDir: File, private val numThreads: Int = 2)
                 modelConfig.whisper = OfflineWhisperModelConfig().apply {
                     this.encoder = encoder
                     this.decoder = decoder
-                    language = "en"
+                    language = spec.language
                     task = "transcribe"
                 }
                 modelConfig.tokens = tokens
                 modelConfig.numThreads = numThreads
-                modelConfig.provider = "cpu"
+                modelConfig.provider = provider
                 modelConfig.modelType = "whisper"
             })
+            val pre = AudioPreprocessor(gain)
             try {
                 WavReader(wav).use { reader ->
                     require(reader.sampleRate == SAMPLE_RATE) { "expected 16 kHz audio, got ${reader.sampleRate}" }
@@ -64,7 +77,7 @@ class SherpaOnnxStt(private val modelDir: File, private val numThreads: Int = 2)
                         coroutineContext.ensureActive()
                         val samples = reader.read(WINDOW)
                         if (samples.isEmpty()) break
-                        vad.acceptWaveform(samples)
+                        vad.acceptWaveform(if (preprocess) pre.process(samples) else samples)
                         done += samples.size
                         drain(vad, recognizer, onSegment)
                         if (reader.totalSamples > 0) onProgress(done.toFloat() / reader.totalSamples)
@@ -89,10 +102,11 @@ class SherpaOnnxStt(private val modelDir: File, private val numThreads: Int = 2)
             try {
                 stream.acceptWaveform(seg.samples, SAMPLE_RATE)
                 recognizer.decode(stream)
-                val text = SttText.clean(recognizer.getResult(stream).text)
+                val durationMs = seg.samples.size * 1000L / SAMPLE_RATE
+                val text = SttText.clean(recognizer.getResult(stream).text, durationMs)
                 if (text != null) {
                     val start = seg.start * 1000L / SAMPLE_RATE
-                    onSegment(Seg(start, start + seg.samples.size * 1000L / SAMPLE_RATE, text))
+                    onSegment(Seg(start, start + durationMs, text))
                 }
             } finally {
                 stream.release()
