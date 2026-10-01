@@ -1,6 +1,8 @@
 package com.nishu.app
 
 import android.content.Context
+import com.nishu.app.audio.RealRecordingRepository
+import com.nishu.app.audio.RecordingRecovery
 import com.nishu.app.data.QuestionAnswerer
 import com.nishu.app.data.RoomConversationRepository
 import com.nishu.app.data.RoomMemoryRepository
@@ -22,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 /**
  * The only place that chooses fake or real implementations. Each backend milestone swaps one line here.
@@ -43,7 +46,11 @@ object AppGraph {
     lateinit var search: SearchRepository
         private set
 
-    val recording: RecordingRepository by lazy { FakeRecordingRepository(fakeStore, scope) }
+    lateinit var recording: RecordingRepository
+        private set
+
+    /** Called when a recording has been finalized. M11 replaces this with the processing pipeline. */
+    var onRecorded: suspend (Long) -> Unit = {}
     val settings: SettingsRepository by lazy { FakeSettingsRepository(fakeStore) }
     val benchmark: BenchmarkRepository by lazy { FakeBenchmarkRepository() }
 
@@ -55,5 +62,7 @@ object AppGraph {
         conversations = RoomConversationRepository(database)
         memory = RoomMemoryRepository(database, QuestionAnswerer { _, _ -> flowOf("The on-device model is not connected yet.") })
         search = RoomSearchRepository(database)
+        recording = RealRecordingRepository(appContext, database)
+        scope.launch { RecordingRecovery.run(database) { onRecorded(it) } }
     }
 }
