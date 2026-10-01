@@ -78,7 +78,7 @@ llama_sampler *build_grammar_chain(const llama_vocab *vocab, const std::string &
 
 }  // namespace
 
-Session *load(const std::string &path, int n_ctx, int n_threads, std::string &error) {
+Session *load(const std::string &path, int n_ctx, int n_threads, int n_threads_batch, std::string &error) {
     llama_model_params mp = llama_model_default_params();
     mp.n_gpu_layers = 0;
     llama_model *model = llama_model_load_from_file(path.c_str(), mp);
@@ -91,7 +91,7 @@ Session *load(const std::string &path, int n_ctx, int n_threads, std::string &er
     cp.n_batch = 512;
     cp.n_ubatch = 512;
     cp.n_threads = n_threads;
-    cp.n_threads_batch = n_threads;
+    cp.n_threads_batch = n_threads_batch;
     cp.type_k = GGML_TYPE_Q8_0;
     cp.type_v = GGML_TYPE_Q8_0;
     cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;  // a quantized V cache needs flash attention

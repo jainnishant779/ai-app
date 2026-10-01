@@ -1,6 +1,7 @@
 package com.nishu.app.llm.llamacpp
 
 import com.nishu.app.llm.ChatMessage
+import com.nishu.app.llm.DeviceProfile
 import com.nishu.app.llm.FinishReason
 import com.nishu.app.llm.GenerationResult
 import com.nishu.app.llm.LLMEngine
@@ -145,11 +146,12 @@ class LlamaCppEngine private constructor(
             modelFile: File,
             systemPrompt: ByteArray,
             nCtx: Int = 1024,
-            nThreads: Int = 4,
+            nThreads: Int = DeviceProfile.read().decodeThreads,
+            nThreadsBatch: Int = DeviceProfile.read().batchThreads,
             prefixCache: PrefixCache? = null,
         ): LlamaCppEngine {
             val error = arrayOfNulls<String>(1)
-            val handle = LlamaBridge.load(modelFile.absolutePath, nCtx, nThreads, error)
+            val handle = LlamaBridge.load(modelFile.absolutePath, nCtx, nThreads, nThreadsBatch, error)
             check(handle != 0L) { "model load failed: ${error[0]}" }
             val template = Qwen3PromptTemplate(String(systemPrompt, Charsets.UTF_8))
             val prefix = LlamaBridge.tokenize(handle, template.renderPrefix())

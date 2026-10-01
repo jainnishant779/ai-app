@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "ggml-backend.h"
 #include "llama.h"
 #include "nishu_session.h"
 
@@ -40,6 +41,19 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *, void *) {
     return JNI_VERSION_1_6;
 }
 
+// The CPU backend is built as several libraries (one per instruction-set level); ggml scores each against this
+// device and loads the best. Must run before the first model load.
+JNIEXPORT void JNICALL
+Java_com_nishu_app_llm_llamacpp_LlamaBridge_loadBackends(JNIEnv *env, jobject, jstring dir) {
+    ggml_backend_load_all_from_path(to_string(env, dir).c_str());
+}
+
+// Which CPU features the loaded backend was compiled with, e.g. "NEON = 1 | DOTPROD = 1 | ...".
+JNIEXPORT jstring JNICALL
+Java_com_nishu_app_llm_llamacpp_LlamaBridge_systemInfo(JNIEnv *env, jobject) {
+    return env->NewStringUTF(llama_print_system_info());
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_nishu_app_llm_llamacpp_LlamaBridge_buildInfo(JNIEnv *env, jobject) {
     std::string s = std::string("llama.cpp ") + NISHU_LLAMA_TAG + "\n" + llama_print_system_info();
@@ -49,9 +63,9 @@ Java_com_nishu_app_llm_llamacpp_LlamaBridge_buildInfo(JNIEnv *env, jobject) {
 // Returns the handle, or 0 on failure. `errorOut[0]` receives the reason.
 JNIEXPORT jlong JNICALL
 Java_com_nishu_app_llm_llamacpp_LlamaBridge_load(JNIEnv *env, jobject, jstring path, jint nCtx,
-                                                  jint nThreads, jobjectArray errorOut) {
+                                                  jint nThreads, jint nThreadsBatch, jobjectArray errorOut) {
     std::string error;
-    nishu::Session *s = nishu::load(to_string(env, path), nCtx, nThreads, error);
+    nishu::Session *s = nishu::load(to_string(env, path), nCtx, nThreads, nThreadsBatch, error);
     if (s == nullptr && errorOut != nullptr && env->GetArrayLength(errorOut) > 0) {
         env->SetObjectArrayElement(errorOut, 0, env->NewStringUTF(error.c_str()));
     }

@@ -41,6 +41,17 @@ object EngineHolder {
         }
     }
 
+    /**
+     * Runs [block] while no LLM is loaded and no other model work is running. Speech models (onnxruntime) and the
+     * LLM are never resident together, even when several recordings are processed at once.
+     */
+    suspend fun <T> exclusively(block: suspend () -> T): T = mutex.withLock {
+        idleJob?.cancel()
+        engine?.close()
+        engine = null
+        block()
+    }
+
     /** Cancels generation in flight without taking the lock. */
     fun cancelCurrent() {
         engine?.cancel()
@@ -57,7 +68,7 @@ object EngineHolder {
         if (!info.exists) throw ModelMissingException(info.file.path)
         val prompt = context.assets.open("system_prompt.bin").use { it.readBytes() }
         val cache = info.prefixCache(nCtx = 1024, llamaTag = BuildConfig.LLAMA_TAG, systemPrompt = prompt)
-        LlamaCppEngine.load(info.file, prompt, nCtx = 1024, nThreads = 4, prefixCache = cache).also { it.warmPrefix() }
+        LlamaCppEngine.load(info.file, prompt, nCtx = 1024, prefixCache = cache).also { it.warmPrefix() }
     }
 
     private fun scheduleUnload() {

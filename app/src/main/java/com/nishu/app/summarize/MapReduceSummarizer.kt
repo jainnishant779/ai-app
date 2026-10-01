@@ -145,7 +145,11 @@ class MapReduceSummarizer(
         val decisions = obj.optJSONArray("decisions")?.let { a ->
             (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } }.map { ExtractedItem(it) }
         }.orEmpty()
-        Extraction(tasks.filter { plausible(it.text, bullets) }.take(8), decisions.filter { plausible(it.text, bullets) }.take(8))
+        Extraction(
+            tasks.filter { plausible(it.text, bullets) }.distinctBy { norm(it.text) }.take(8),
+            decisions.map { it.copy(text = it.text.removePrefix("Decision:").trim()) }
+                .filter { plausible(it.text, bullets) }.distinctBy { norm(it.text) }.take(8),
+        )
     } catch (e: JSONException) {
         null
     }

@@ -76,6 +76,9 @@ interface TranscriptDao {
 interface SummaryDao {
     @androidx.room.Upsert suspend fun upsert(s: SummaryEntity)
 
+    @Query("DELETE FROM summary WHERE conversationId = :id")
+    suspend fun clear(id: Long)
+
     @Query("SELECT * FROM summary WHERE conversationId = :id")
     fun observe(id: Long): Flow<SummaryEntity?>
 

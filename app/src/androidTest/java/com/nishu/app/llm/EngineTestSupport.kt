@@ -34,7 +34,7 @@ object EngineTestSupport {
 
     fun loadEngine(nCtx: Int = 1024, cache: PrefixCache? = sharedCache(nCtx)): LlamaCppEngine {
         requireModel()
-        return LlamaCppEngine.load(modelFile, systemPrompt(), nCtx = nCtx, nThreads = 4, prefixCache = cache)
+        return LlamaCppEngine.load(modelFile, systemPrompt(), nCtx = nCtx, prefixCache = cache)
     }
 
     fun fixtureNames(): List<String> =

@@ -14,12 +14,16 @@ object LlamaBridge {
 
     init {
         System.loadLibrary("nishu_llama")
+        // The per-CPU backend libraries live next to the app's other native libraries (needs legacy packaging).
+        loadBackends(com.nishu.app.AppGraph.appContext.applicationInfo.nativeLibraryDir)
     }
 
+    private external fun loadBackends(dir: String)
+    external fun systemInfo(): String
     external fun buildInfo(): String
 
     /** Returns a native handle, or 0 on failure with the reason in errorOut[0]. */
-    external fun load(path: String, nCtx: Int, nThreads: Int, errorOut: Array<String?>): Long
+    external fun load(path: String, nCtx: Int, nThreads: Int, nThreadsBatch: Int, errorOut: Array<String?>): Long
     external fun release(handle: Long)
     external fun cancel(handle: Long)
     external fun contextSize(handle: Long): Int

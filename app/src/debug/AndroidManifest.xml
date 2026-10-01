@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug builds only: lets a developer drive processing and benchmarks from adb without touching the screen. -->
+        <receiver
+            android:name="com.nishu.app.debug.DebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.nishu.app.DEBUG_REPROCESS" />
+                <action android:name="com.nishu.app.DEBUG_BENCH" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

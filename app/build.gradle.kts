@@ -56,7 +56,12 @@ android {
 
     testOptions { unitTests.isReturnDefaultValues = true }
 
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // The CPU backend variants are loaded from nativeLibraryDir by directory scan, so the libraries must be
+        // extracted to disk at install time instead of being mapped straight out of the APK.
+        jniLibs.useLegacyPackaging = true
+    }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }

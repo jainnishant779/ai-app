@@ -32,7 +32,7 @@ struct Session {
 };
 
 // Returns nullptr and fills `error` on failure.
-Session *load(const std::string &path, int n_ctx, int n_threads, std::string &error);
+Session *load(const std::string &path, int n_ctx, int n_threads, int n_threads_batch, std::string &error);
 void release(Session *s);
 
 std::vector<llama_token> tokenize(Session *s, const std::string &text);

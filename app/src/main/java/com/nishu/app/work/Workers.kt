@@ -59,9 +59,14 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val db = AppGraph.database
         val conv = db.conversations().get(id) ?: return Result.failure()
         promote("Transcribing…")
-        EngineHolder.unload() // free the LLM (if Ask loaded it) before onnxruntime comes in
         db.conversations().setStatus(id, "TRANSCRIBING", ProcessingStage.TRANSCRIBING.name)
-        val audio = conv.audioPath?.let(::File)
+        // One heavy model at a time across all recordings: waits for any LLM work and unloads the LLM first.
+        return EngineHolder.exclusively { transcribe(id, conv.audioPath) }
+    }
+
+    private suspend fun transcribe(id: Long, audioPath: String?): Result {
+        val db = AppGraph.database
+        val audio = audioPath?.let(::File)
         if (audio == null || !audio.exists()) {
             db.conversations().setStatus(id, "FAILED", ProcessingStage.TRANSCRIBING.name, "Audio file is missing")
             return Result.failure()
@@ -69,7 +74,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val sttRoot = File(applicationContext.filesDir, "models/stt")
         val stt = SherpaOnnxStt(sttRoot)
         return try {
+            // A re-run starts from scratch, so no stale summary or tasks outlive a new transcript.
             db.transcripts().clear(id)
+            db.summaries().clear(id)
+            db.tasks().clear(id)
+            db.decisions().clear(id)
             // Who spoke when first; the diarizer is released before recognition starts, so the models are never resident together.
             val turns = runCatching { SpeakerDiarizer(sttRoot).diarize(audio) }
                 .onFailure { Log.w(TAG, "speaker identification skipped", it) }

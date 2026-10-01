@@ -24,6 +24,9 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
     /** Turns with speakers numbered by first appearance, or empty when unavailable or the recording is too long. */
     suspend fun diarize(wav: File): List<SpeakerTurn> = withContext(Dispatchers.Default) {
         if (!isInstalled) return@withContext emptyList()
+        // Quiet speech is under the segmentation model's detection level; the same gain as for recognition fixes that
+        // (measured on real recordings: 1 detected speaker without it, 2 with it).
+        val pre = AudioPreprocessor(AudioPreprocessor.measureGain(wav))
         val samples = WavReader(wav).use { r ->
             if (r.totalSamples > MAX_SAMPLES) return@withContext emptyList()
             FloatArray(r.totalSamples.toInt()).also { out ->
@@ -31,7 +34,7 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
                 while (at < out.size) {
                     val chunk = r.read(minOf(65_536, out.size - at))
                     if (chunk.isEmpty()) break
-                    chunk.copyInto(out, at)
+                    pre.process(chunk).copyInto(out, at)
                     at += chunk.size
                 }
             }
