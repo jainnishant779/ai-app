@@ -102,9 +102,10 @@ fun TranscriptRoute(id: Long, onBack: () -> Unit) {
     )
     val state by vm.state.collectAsStateWithLifecycle()
     val player by vm.player.state.collectAsStateWithLifecycle()
+    val envelope by vm.player.envelope.collectAsStateWithLifecycle()
     DisposableEffect(Unit) { onDispose { vm.player.pause() } }
     TranscriptScreen(
-        state = state, player = player, envelope = vm.player.envelope, onBack = onBack,
+        state = state, player = player, envelope = envelope, onBack = onBack,
         onQuery = vm::setQuery, onSeek = vm.player::seekTo, onPlayPause = { if (player.isPlaying) vm.player.pause() else vm.player.play() },
         onSpeed = vm.player::cycleSpeed, onSave = vm::saveToMemory,
     )

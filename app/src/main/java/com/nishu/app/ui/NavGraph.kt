@@ -19,7 +19,10 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.nishu.app.DeepLinks
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -95,6 +98,14 @@ fun NishuApp() {
     val route = entry?.destination?.route
     val showBar = route in tabs.map { it.route }
 
+    val pending by DeepLinks.pendingConversation.collectAsState()
+    LaunchedEffect(pending) {
+        pending?.let {
+            nav.navigate(Routes.conversation(it)) { launchSingleTop = true }
+            DeepLinks.pendingConversation.value = null
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -126,6 +137,7 @@ fun NishuApp() {
                     id = e.arguments!!.getLong("id"),
                     onBack = { nav.popBackStack() },
                     onTranscript = { nav.navigate(Routes.transcript(it)) },
+                    onProcessing = { nav.navigate(Routes.processing(it)) },
                 )
             }
             composable(Routes.TRANSCRIPT, idArg) { e ->

@@ -89,8 +89,8 @@ class SherpaOnnxStt(private val modelDir: File, private val numThreads: Int = 2)
             try {
                 stream.acceptWaveform(seg.samples, SAMPLE_RATE)
                 recognizer.decode(stream)
-                val text = recognizer.getResult(stream).text.trim()
-                if (text.isNotEmpty()) {
+                val text = SttText.clean(recognizer.getResult(stream).text)
+                if (text != null) {
                     val start = seg.start * 1000L / SAMPLE_RATE
                     onSegment(Seg(start, start + seg.samples.size * 1000L / SAMPLE_RATE, text))
                 }

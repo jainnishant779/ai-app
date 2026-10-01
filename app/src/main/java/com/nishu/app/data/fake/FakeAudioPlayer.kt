@@ -20,7 +20,9 @@ class FakeAudioPlayer(durationMs: Long = 134_000) : AudioPlayer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _state = MutableStateFlow(PlayerState(durationMs = durationMs))
     override val state: StateFlow<PlayerState> = _state
-    override val envelope: List<Float> = List(120) { i -> (0.2f + 0.8f * abs(sin(i * 0.37f) * sin(i * 0.11f + 1f))).coerceIn(0.1f, 1f) }
+    override val envelope: StateFlow<List<Float>> = MutableStateFlow(
+        List(120) { i -> (0.2f + 0.8f * abs(sin(i * 0.37f) * sin(i * 0.11f + 1f))).coerceIn(0.1f, 1f) },
+    )
     private var job: Job? = null
 
     override fun play() {

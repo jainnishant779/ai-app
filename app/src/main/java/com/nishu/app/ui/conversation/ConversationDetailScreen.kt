@@ -79,10 +79,11 @@ class ConversationDetailViewModel(private val id: Long, private val repo: Conver
     fun setCategory(c: ConversationCategory) = viewModelScope.launch { repo.setCategory(id, c) }
     fun deleteAudio() = viewModelScope.launch { repo.deleteAudio(id) }
     fun delete(onDone: () -> Unit) = viewModelScope.launch { repo.delete(id); onDone() }
+    fun retry(onStarted: () -> Unit) = viewModelScope.launch { repo.retryProcessing(id); onStarted() }
 }
 
 @Composable
-fun ConversationDetailRoute(id: Long, onBack: () -> Unit, onTranscript: (Long) -> Unit) {
+fun ConversationDetailRoute(id: Long, onBack: () -> Unit, onTranscript: (Long) -> Unit, onProcessing: (Long) -> Unit = {}) {
     val vm: ConversationDetailViewModel = viewModel(
         key = "detail_$id", factory = vmFactory { ConversationDetailViewModel(id, AppGraph.conversations) },
     )
@@ -91,6 +92,7 @@ fun ConversationDetailRoute(id: Long, onBack: () -> Unit, onTranscript: (Long) -
         detail = detail, onBack = onBack, onTranscript = { onTranscript(id) },
         onToggleTask = vm::setTaskDone, onRename = vm::rename, onSetCategory = vm::setCategory,
         onDeleteAudio = vm::deleteAudio, onDelete = { vm.delete(onBack) },
+        onRetry = { vm.retry { onProcessing(id) } },
     )
 }
 
@@ -106,6 +108,7 @@ fun ConversationDetailScreen(
     onSetCategory: (ConversationCategory) -> Unit,
     onDeleteAudio: () -> Unit,
     onDelete: () -> Unit,
+    onRetry: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var renaming by remember { mutableStateOf(false) }
@@ -130,7 +133,21 @@ fun ConversationDetailScreen(
             )
             when {
                 detail == null -> LoadingState()
-                detail.conversation.status == ConversationStatus.FAILED -> ErrorState("Summary unavailable. Your transcript was saved.")
+                detail.conversation.status == ConversationStatus.FAILED -> Column(
+                    Modifier.padding(horizontal = Dimens.ScreenGutter),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.ItemGap),
+                ) {
+                    Text(detail.conversation.title, style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "${detail.conversation.timestampLabel} • ${detail.conversation.durationLabel}",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ErrorState("Summary unavailable. Your transcript is saved.", onRetry = onRetry)
+                    detail.statusDetail?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    LinkRow("View Full Transcript", onTranscript)
+                }
                 else -> {
                     Column(Modifier.padding(horizontal = Dimens.ScreenGutter)) {
                         Text(detail.conversation.title, style = MaterialTheme.typography.headlineSmall)

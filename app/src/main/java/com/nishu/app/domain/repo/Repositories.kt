@@ -17,6 +17,8 @@ interface ConversationRepository {
     suspend fun deleteAudio(id: Long)
     suspend fun delete(id: Long)
     suspend fun cancelProcessing(id: Long)
+    /** Runs transcription and summarization again, e.g. after a failure. */
+    suspend fun retryProcessing(id: Long)
     /** Path of the recorded WAV, for the transcript player; null if the audio was deleted. */
     suspend fun audioPath(id: Long): String?
 }

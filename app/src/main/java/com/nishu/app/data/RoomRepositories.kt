@@ -35,6 +35,7 @@ fun ConversationEntity.toUi(summary: SummaryEntity?, nowMs: Long = System.curren
 class RoomConversationRepository(
     private val db: NishuDatabase,
     private val onCancel: suspend (Long) -> Unit = {},
+    private val onRetry: suspend (Long) -> Unit = {},
 ) : ConversationRepository {
     private val uiModels: Flow<List<ConversationUiModel>> =
         combine(db.conversations().observeAll(), db.summaries().observeAll()) { convs, sums ->
@@ -106,6 +107,11 @@ class RoomConversationRepository(
     override suspend fun cancelProcessing(id: Long) {
         onCancel(id)
         db.conversations().setStatus(id, "FAILED", db.conversations().get(id)?.stage, "Cancelled")
+    }
+
+    override suspend fun retryProcessing(id: Long) {
+        db.conversations().setStatus(id, "RECORDED", null, null)
+        onRetry(id)
     }
 
     override suspend fun audioPath(id: Long): String? = db.conversations().get(id)?.audioPath

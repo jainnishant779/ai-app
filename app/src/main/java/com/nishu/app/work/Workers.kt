@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -23,6 +24,7 @@ import com.nishu.app.summarize.MapReduceSummarizer
 import kotlinx.coroutines.CancellationException
 import java.io.File
 
+private const val TAG = "NishuWork"
 private const val CHANNEL = "processing"
 private const val KEY_ID = "id"
 
@@ -74,9 +76,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         } catch (e: CancellationException) {
             throw e
         } catch (e: SttModelMissing) {
+            Log.e(TAG, "stt model missing", e)
             db.conversations().setStatus(id, "FAILED", ProcessingStage.TRANSCRIBING.name, e.message)
             Result.failure()
         } catch (e: Exception) {
+            Log.e(TAG, "transcribe failed for conversation $id", e)
             db.conversations().setStatus(id, "FAILED", ProcessingStage.TRANSCRIBING.name, "Transcription failed: ${e.message}")
             Result.failure()
         }
@@ -96,15 +100,19 @@ class SummarizeWorker(context: Context, params: WorkerParameters) : CoroutineWor
             EngineHolder.withEngine { engine ->
                 MapReduceSummarizer(db, engine, grammar, modelId = "qwen3-0.6b-q4_k_m").run(id)
             }
+            val done = db.conversations().get(id)
+            if (done != null) com.nishu.app.CompletionNotifier.notifyDone(applicationContext, id, done.title, done.status == "DONE")
             Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: ModelMissingException) {
             // The transcript is still a useful product on its own.
+            Log.e(TAG, "model missing", e)
             db.conversations().setStatus(id, "FAILED", ProcessingStage.SUMMARIZING.name, "Summary unavailable: model not installed")
             Result.success()
         } catch (e: Exception) {
-            db.conversations().setStatus(id, "FAILED", ProcessingStage.SUMMARIZING.name, "Summary unavailable")
+            Log.e(TAG, "summarize failed for conversation $id", e)
+            db.conversations().setStatus(id, "FAILED", ProcessingStage.SUMMARIZING.name, "Summary unavailable: ${e.javaClass.simpleName}: ${e.message}")
             Result.success()
         }
     }
@@ -114,11 +122,12 @@ object Pipeline {
     private fun name(id: Long) = "process-$id"
 
     /** Transcribe, then summarize. Two chained workers so the STT and LLM models are never loaded together. */
-    fun enqueue(context: Context, id: Long) {
+    fun enqueue(context: Context, id: Long, replace: Boolean = false) {
         val data = workDataOf(KEY_ID to id)
         val transcribe = OneTimeWorkRequestBuilder<TranscribeWorker>().setInputData(data).build()
         val summarize = OneTimeWorkRequestBuilder<SummarizeWorker>().setInputData(data).build()
-        WorkManager.getInstance(context).beginUniqueWork(name(id), ExistingWorkPolicy.KEEP, transcribe).then(summarize).enqueue()
+        val policy = if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
+        WorkManager.getInstance(context).beginUniqueWork(name(id), policy, transcribe).then(summarize).enqueue()
     }
 
     fun cancel(context: Context, id: Long) {

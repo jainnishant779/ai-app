@@ -11,8 +11,8 @@ data class PlayerState(
 
 interface AudioPlayer {
     val state: StateFlow<PlayerState>
-    /** Bar heights in 0..1 for the waveform; empty when unknown. */
-    val envelope: List<Float>
+    /** Bar heights in 0..1 for the waveform. Empty until computed (or when unknown). */
+    val envelope: StateFlow<List<Float>>
     fun play()
     fun pause()
     fun seekTo(ms: Long)

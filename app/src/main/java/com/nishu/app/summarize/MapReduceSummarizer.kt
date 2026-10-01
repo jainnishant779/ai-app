@@ -157,6 +157,6 @@ class MapReduceSummarizer(
             sb.append(piece)
             if (RepetitionGuard.isLooping(sb.toString())) engine.cancel()
         }
-        return RepetitionGuard.clean(r.text)
+        return SummaryText.clean(RepetitionGuard.clean(r.text))
     }
 }
