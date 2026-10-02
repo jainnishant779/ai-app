@@ -97,6 +97,7 @@ data class SettingsInfo(
     val storageUsedBytes: Long,
     val storageTotalBytes: Long,
     val userName: String,
+    val languageCode: String = "hinglish",
 )
 
 data class BenchmarkResultUiModel(

@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.nishu.app.AppGraph
+import com.nishu.app.work.Pipeline
 import com.nishu.app.llm.ChatMessage
 import com.nishu.app.llm.DeviceProfile
 import com.nishu.app.llm.EngineHolder
@@ -35,6 +36,8 @@ import kotlinx.coroutines.launch
  *               results are logged under the tag NishuBench.
  *               --es configs "repack:512,norepack:512,repack:128,norepack:128" sweeps weight repacking and micro-batch size,
  *               logging memory after each load (the default is one run with the app's own settings).
+ *   stt bench:  --es mode stt [--es model qwen3|swift] [--es wav imports/x.wav] [--es sttThreads 4]
+ *               times one model on one file (default: the longest recording) and writes its text to files/bench_<model>.txt.
  *
  * The benchmark runs as a foreground worker: a broadcast receiver that takes longer than a few seconds is killed as an ANR.
  */
@@ -45,13 +48,17 @@ class DebugReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.Default).launch {
                     try {
+                        val lang = intent.getStringExtra("lang")
+                        if (lang != null) {
+                            context.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("audio_language", lang).apply()
+                        }
                         val ids = buildList {
                             if (intent.hasExtra("id")) add(intent.getLongExtra("id", -1))
                             intent.getStringExtra("ids")?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.let(::addAll)
                         }.filter { it > 0 }
                         for (id in ids) {
-                            Log.i("NishuDebug", "reprocess $id")
-                            AppGraph.conversations.retryProcessing(id)
+                            Log.i("NishuDebug", "reprocess $id (lang=${lang ?: "default"})")
+                            Pipeline.enqueue(context, id, replace = true, language = lang)
                         }
                     } finally {
                         pending.finish()
@@ -59,13 +66,14 @@ class DebugReceiver : BroadcastReceiver() {
                 }
             }
             "com.nishu.app.DEBUG_IMPORT" -> {
-                // am broadcast -a com.nishu.app.DEBUG_IMPORT -n com.nishu.app/.debug.DebugReceiver --es file imports/meeting.wav --es title "Weekly meeting"
+                // am broadcast -a com.nishu.app.DEBUG_IMPORT -n com.nishu.app/.debug.DebugReceiver --es file imports/meeting.wav --es title "Weekly meeting" [--es lang english]
                 // The WAV (16 kHz mono PCM16) must already be inside the app's files dir (see tools/import_audio.ps1).
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.Default).launch {
                     try {
                         val src = java.io.File(context.filesDir, intent.getStringExtra("file") ?: return@launch)
                         val title = intent.getStringExtra("title") ?: src.nameWithoutExtension
+                        val lang = intent.getStringExtra("lang")
                         val now = System.currentTimeMillis()
                         val id = AppGraph.database.conversations().insert(
                             com.nishu.app.data.db.ConversationEntity(title = title, createdAt = now, status = "RECORDED"),
@@ -76,8 +84,8 @@ class DebugReceiver : BroadcastReceiver() {
                         AppGraph.database.conversations().update(
                             row.copy(audioPath = dest.absolutePath, durationMs = com.nishu.app.audio.WavFile.durationMs(dest)),
                         )
-                        Log.i("NishuDebug", "imported '$title' as conversation $id (${dest.length() / 1_000_000} MB)")
-                        AppGraph.onRecorded(id)
+                        Log.i("NishuDebug", "imported '$title' as conversation $id (${dest.length() / 1_000_000} MB, lang=${lang ?: "default"})")
+                        Pipeline.enqueue(context, id, replace = true, language = lang)
                     } finally {
                         pending.finish()
                     }
@@ -91,6 +99,8 @@ class DebugReceiver : BroadcastReceiver() {
                     "mode" to (intent.getStringExtra("mode") ?: "llm"),
                     "sttThreads" to (intent.getStringExtra("sttThreads") ?: "1,2,3,4"),
                     "configs" to (intent.getStringExtra("configs") ?: ""),
+                    "model" to (intent.getStringExtra("model") ?: ""),
+                    "wav" to (intent.getStringExtra("wav") ?: ""),
                 )
                 WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<BenchWorker>().setInputData(data).build())
             }
@@ -108,29 +118,47 @@ class BenchWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         return ForegroundInfo(2003, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
-    /** STT on CPU versus NNAPI (the MediaTek APU) with the real model and your longest recording. */
+    /** One STT model on one file: speed, peak memory and the text, so models can be compared on the same audio. */
     private suspend fun sttBench(): Result {
         val root = java.io.File(applicationContext.filesDir, "models/stt")
-        val wav = java.io.File(applicationContext.filesDir, "recordings").listFiles { f -> f.extension == "wav" }
-            .orEmpty().maxByOrNull { it.length() } ?: return Result.failure()
+        val named = inputData.getString("wav")?.takeIf { it.isNotBlank() }
+        val wav = named?.let { java.io.File(applicationContext.filesDir, it) }
+            ?: java.io.File(applicationContext.filesDir, "recordings").listFiles { f -> f.extension == "wav" }
+                .orEmpty().maxByOrNull { it.length() } ?: return Result.failure()
+        val modelName = inputData.getString("model")?.takeIf { it.isNotBlank() } ?: "default"
+        val spec = when (modelName) {
+            "qwen3" -> com.nishu.app.stt.SttModelSpec.QWEN3_HINGLISH
+            "swift" -> com.nishu.app.stt.SttModelSpec.HINGLISH_SWIFT
+            "base", "en", "english" -> com.nishu.app.stt.SttModelSpec.WHISPER_BASE_EN
+            "tiny" -> com.nishu.app.stt.SttModelSpec.TINY_EN
+            else -> com.nishu.app.stt.SttModelSpec.select(root)
+        }
         val seconds = (wav.length() - 44) / 32000.0
-        Log.i("NishuBench", "stt bench on ${wav.name} (${"%.1f".format(seconds)} s of audio)")
+        Log.i("NishuBench", "stt bench ${spec.id} on ${wav.name} (${"%.1f".format(seconds)} s of audio)")
         EngineHolder.exclusively {
-            val texts = HashMap<String, String>()
-            val threadCounts = (inputData.getString("sttThreads") ?: "1,2,3,4").split(',').mapNotNull { it.trim().toIntOrNull() }
+            val threadCounts = (inputData.getString("sttThreads") ?: "4").split(',').mapNotNull { it.trim().toIntOrNull() }
             for (n in threadCounts) {
-                val stt = com.nishu.app.stt.SherpaOnnxStt(root, numThreads = n, provider = "cpu")
-                val t0 = System.nanoTime()
+                var peak = 0
                 val out = StringBuilder()
-                val result = runCatching { stt.transcribe(wav) { out.append(it.text).append(' ') } }
+                val stt = com.nishu.app.stt.SherpaOnnxStt(root, spec = spec, numThreads = n, provider = "cpu")
+                val t0 = System.nanoTime()
+                val result = runCatching {
+                    stt.transcribe(wav) {
+                        out.append(it.text).append(' ')
+                        val mem = android.os.Debug.MemoryInfo().also { m -> android.os.Debug.getMemoryInfo(m) }
+                        peak = maxOf(peak, mem.totalPss / 1000)
+                    }
+                }
                 val ms = (System.nanoTime() - t0) / 1_000_000
+                val words = out.trim().split(Regex("\\s+")).size
                 Log.i(
                     "NishuBench",
-                    "stt threads=$n: ${if (result.isSuccess) "$ms ms (${"%.2f".format(seconds * 1000 / ms)}x realtime)" else "FAILED ${result.exceptionOrNull()}"}",
+                    "stt ${spec.id} threads=$n: " +
+                        (if (result.isSuccess) "$ms ms (RTF ${"%.2f".format(ms / 1000.0 / seconds)}), peak PSS $peak MB, $words words"
+                        else "FAILED ${result.exceptionOrNull()}"),
                 )
-                if (result.isSuccess) texts["t$n"] = out.toString().trim()
+                java.io.File(applicationContext.filesDir, "bench_$modelName.txt").writeText(out.toString().trim())
             }
-            Log.i("NishuBench", "stt text identical across thread counts: ${texts.values.distinct().size <= 1}")
         }
         Log.i("NishuBench", "done")
         return Result.success()

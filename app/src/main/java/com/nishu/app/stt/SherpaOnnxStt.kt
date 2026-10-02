@@ -1,6 +1,7 @@
 package com.nishu.app.stt
 
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
+import com.k2fsa.sherpa.onnx.OfflineQwen3AsrModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
@@ -44,7 +45,10 @@ class SherpaOnnxStt(
         val vadPath = need(File(modelRoot, "silero_vad.onnx"))
         val encoder = need(spec.encoder(modelRoot))
         val decoder = need(spec.decoder(modelRoot))
-        val tokens = need(spec.tokens(modelRoot))
+        val qwen = spec.engine == SttModelSpec.Engine.QWEN3_ASR
+        val tokens = if (qwen) "" else need(spec.tokens(modelRoot))
+        val convFrontend = if (qwen) need(spec.convFrontend(modelRoot)) else ""
+        val tokenizer = if (qwen) File(need(File(spec.tokenizerDir(modelRoot), "vocab.json"))).parent!! else ""
         val gain = if (preprocess) AudioPreprocessor.measureGain(wav) else 1f
 
         withContext(Dispatchers.Default) {
@@ -62,16 +66,28 @@ class SherpaOnnxStt(
                 provider = "cpu"
             })
             val recognizer = OfflineRecognizer(null, OfflineRecognizerConfig().apply {
-                modelConfig.whisper = OfflineWhisperModelConfig().apply {
-                    this.encoder = encoder
-                    this.decoder = decoder
-                    language = spec.language
-                    task = "transcribe"
+                if (qwen) {
+                    modelConfig.qwen3Asr = OfflineQwen3AsrModelConfig().apply {
+                        this.convFrontend = convFrontend
+                        this.encoder = encoder
+                        this.decoder = decoder
+                        this.tokenizer = tokenizer
+                        // A 25 s chunk of Hindi in Devanagari needs far more than the default 128 new tokens.
+                        maxTotalLen = 1024
+                        maxNewTokens = 448
+                    }
+                } else {
+                    modelConfig.whisper = OfflineWhisperModelConfig().apply {
+                        this.encoder = encoder
+                        this.decoder = decoder
+                        language = spec.language
+                        task = "transcribe"
+                    }
+                    modelConfig.tokens = tokens
+                    modelConfig.modelType = "whisper"
                 }
-                modelConfig.tokens = tokens
                 modelConfig.numThreads = numThreads
                 modelConfig.provider = provider
-                modelConfig.modelType = "whisper"
             })
             val pre = AudioPreprocessor(gain)
             val batcher = SpeechBatcher(BATCH_SAMPLES)

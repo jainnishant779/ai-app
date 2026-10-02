@@ -168,6 +168,9 @@ class FakeSettingsRepository(private val store: FakeStore) : SettingsRepository 
     override suspend fun setUserName(name: String) {
         store.userName.value = name
     }
+
+    override suspend fun setLanguage(language: String) {
+    }
 }
 
 class FakeBenchmarkRepository : BenchmarkRepository {

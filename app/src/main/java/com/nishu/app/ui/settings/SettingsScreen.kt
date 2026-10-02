@@ -72,13 +72,18 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(private val repo: SettingsRepository) : ViewModel() {
     val state: StateFlow<SettingsInfo?> = repo.info.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     fun setName(name: String) = viewModelScope.launch { repo.setUserName(name) }
+    fun toggleLanguage() = viewModelScope.launch {
+        val current = state.value?.languageLabel ?: ""
+        val next = if (current.contains("English", ignoreCase = true)) "hinglish" else "english"
+        repo.setLanguage(next)
+    }
 }
 
 @Composable
 fun SettingsRoute(onBenchmark: () -> Unit, onDiagnostics: () -> Unit) {
     val vm: SettingsViewModel = viewModel(factory = vmFactory { SettingsViewModel(AppGraph.settings) })
     val info by vm.state.collectAsStateWithLifecycle()
-    SettingsScreen(info, vm::setName, onBenchmark, onDiagnostics, showDeveloper = BuildConfig.DEBUG)
+    SettingsScreen(info, vm::setName, vm::toggleLanguage, onBenchmark, onDiagnostics, showDeveloper = BuildConfig.DEBUG)
 }
 
 @Composable
@@ -112,6 +117,7 @@ private fun SettingsRow(icon: ImageVector, label: String, value: String? = null,
 fun SettingsScreen(
     info: SettingsInfo?,
     onSetName: (String) -> Unit,
+    onToggleLanguage: () -> Unit,
     onBenchmark: () -> Unit,
     onDiagnostics: () -> Unit,
     showDeveloper: Boolean,
@@ -144,7 +150,7 @@ fun SettingsScreen(
                     item {
                         SettingsSection("Audio & Transcription") {
                             SettingsRow(Icons.Rounded.GraphicEq, "STT Model", info.sttLabel)
-                            SettingsRow(Icons.Rounded.Language, "Language", info.languageLabel)
+                            SettingsRow(Icons.Rounded.Language, "Language", info.languageLabel, onClick = onToggleLanguage)
                             SettingsRow(Icons.Rounded.Mic, "Microphone", "System Default")
                         }
                     }
@@ -203,6 +209,6 @@ fun SettingsScreen(
 @Composable
 private fun SettingsPreview() = NishuTheme(darkTheme = false) {
     Surface(color = MaterialTheme.colorScheme.background) {
-        SettingsScreen(PreviewData.settings, {}, {}, {}, showDeveloper = true)
+        SettingsScreen(PreviewData.settings, {}, {}, {}, {}, showDeveloper = true)
     }
 }

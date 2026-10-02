@@ -43,6 +43,7 @@ import com.nishu.app.domain.repo.ConversationRepository
 import com.nishu.app.domain.repo.RecordingRepository
 import com.nishu.app.domain.repo.SettingsRepository
 import com.nishu.app.ui.components.ConversationCard
+import com.nishu.app.ui.components.NishuFilterChip
 import com.nishu.app.ui.components.NishuTopBar
 import com.nishu.app.ui.components.NishuIconButton
 import com.nishu.app.ui.components.PrimaryButton
@@ -58,6 +59,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val greeting: String = "",
@@ -67,12 +69,14 @@ data class HomeUiState(
     val recentConversations: List<ConversationUiModel> = emptyList(),
     val isRecording: Boolean = false,
     val recordingElapsed: String? = null,
+    val languageCode: String = "hinglish",
+    val sttLabel: String = "Whisper Hinglish (base)",
 )
 
 class HomeViewModel(
     conversations: ConversationRepository,
     recording: RecordingRepository,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
     val state: StateFlow<HomeUiState> = combine(
         settings.info, conversations.counts(), conversations.recent(3), recording.state,
@@ -85,8 +89,14 @@ class HomeViewModel(
             recentConversations = recent,
             isRecording = rec.status != RecordingStatus.IDLE,
             recordingElapsed = if (rec.status != RecordingStatus.IDLE) formatClock(rec.elapsedMs) else null,
+            languageCode = info.languageCode,
+            sttLabel = info.sttLabel,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+    fun setLanguage(lang: String) = viewModelScope.launch {
+        settings.setLanguage(lang)
+    }
 }
 
 @Composable
@@ -113,6 +123,7 @@ fun HomeRoute(
         onOpenConversation = onOpenConversation,
         onSeeAll = onSeeAll,
         onOpenSettings = onOpenSettings,
+        onSetLanguage = vm::setLanguage,
     )
 }
 
@@ -123,6 +134,7 @@ fun HomeScreen(
     onOpenConversation: (Long) -> Unit,
     onSeeAll: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSetLanguage: (String) -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = Dimens.ContentMaxWidth).fillMaxSize()) {
@@ -153,8 +165,24 @@ fun HomeScreen(
                             "I'm ready to listen, remember and help you.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
                         )
+                        Row(
+                            Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            NishuFilterChip(
+                                label = "Hinglish (Chat)",
+                                selected = state.languageCode == "hinglish",
+                                onClick = { onSetLanguage("hinglish") },
+                            )
+                            NishuFilterChip(
+                                label = "English (Meetings)",
+                                selected = state.languageCode == "english",
+                                onClick = { onSetLanguage("english") },
+                            )
+                        }
                         PrimaryButton(
                             text = if (state.isRecording) "Recording ${state.recordingElapsed} • Tap to open" else "Start Recording",
                             onClick = onStartRecording,

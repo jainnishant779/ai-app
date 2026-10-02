@@ -15,9 +15,10 @@ object SttText {
     /** Annotations that mean "someone is talking but I could not read it" (as opposed to music or silence). */
     private val unreadableSpeech = Regex("speak|foreign|language|unclear|inaudible|mumbl|crosstalk|indistinct|speech", RegexOption.IGNORE_CASE)
     private val silenceHallucination = Regex(
-        "^(thank you\\.?|thanks\\.?|thanks for watching\\.?|thank you for watching\\.?|bye\\.?|you|\\.+|okay\\.?|so\\.?)$",
+        "^(thank you|thanks|thanks for watching|thank you for watching|please subscribe|subscribe|bye|goodbye|you|okay|so|dh|ve|aam|haan|haan haan|hara|toh)[.,!?:;\\s]*$",
         RegexOption.IGNORE_CASE,
     )
+    private val validShortWords = setOf("ok", "no", "hi", "ye", "go", "in", "on", "at", "to", "we", "he", "it", "is", "up", "so", "me", "if", "us", "am", "an", "or", "by", "my", "do")
 
     /**
      * @param durationMs how long the VAD said speech lasted; short segments are held to a stricter standard.
@@ -33,7 +34,12 @@ object SttText {
             return if (readable && durationMs >= UNCLEAR_MIN_MS) UNCLEAR else null
         }
         val collapsed = RepetitionGuard.clean(stripped).ifBlank { stripped }
-        if (durationMs < SHORT_MS && silenceHallucination.matches(collapsed)) return null
+        if (durationMs < SHORT_MS) {
+            if (silenceHallucination.matches(collapsed)) return null
+            val coreLetters = collapsed.filter { it.isLetter() }
+            if (coreLetters.length <= 1) return null
+            if (coreLetters.length == 2 && coreLetters.lowercase() !in validShortWords) return null
+        }
         return collapsed
     }
 

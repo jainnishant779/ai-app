@@ -50,6 +50,7 @@ interface SearchRepository {
 interface SettingsRepository {
     val info: Flow<SettingsInfo>
     suspend fun setUserName(name: String)
+    suspend fun setLanguage(language: String)
 }
 
 interface BenchmarkRepository {

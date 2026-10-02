@@ -35,6 +35,12 @@ Push-One "$stt\sherpa-onnx-whisper-tiny.en\tiny.en-encoder.int8.onnx" "stt/tiny.
 Push-One "$stt\sherpa-onnx-whisper-tiny.en\tiny.en-decoder.int8.onnx" "stt/tiny.en-decoder.int8.onnx"
 Push-One "$stt\sherpa-onnx-whisper-tiny.en\tiny.en-tokens.txt" "stt/tiny.en-tokens.txt"
 
+# Whisper Base (Multilingual / English mode)
+$base = "$tool\stt-eval\sherpa-onnx-whisper-base"
+Push-One "$base\base-encoder.int8.onnx" "stt/whisper-base/base-encoder.int8.onnx"
+Push-One "$base\base-decoder.int8.onnx" "stt/whisper-base/base-decoder.int8.onnx"
+Push-One "$base\base-tokens.txt" "stt/whisper-base/base-tokens.txt"
+
 # Speaker identification
 Push-One "$tool\diar\sherpa-onnx-pyannote-segmentation-3-0\model.int8.onnx" "stt/diar/pyannote-segmentation-3-0.int8.onnx"
 Push-One "$tool\diar\3dspeaker_zh_en_adv.onnx" "stt/diar/3dspeaker-campplus-zh-en.onnx"

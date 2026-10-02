@@ -22,6 +22,7 @@ import com.nishu.app.stt.SherpaOnnxStt
 import com.nishu.app.stt.SpeakerDiarizer
 import com.nishu.app.stt.SpeakerTurns
 import com.nishu.app.stt.SttModelMissing
+import com.nishu.app.stt.SttModelSpec
 import com.nishu.app.summarize.MapReduceSummarizer
 import com.nishu.app.util.Trace
 import kotlinx.coroutines.CancellationException
@@ -77,7 +78,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             return Result.failure()
         }
         val sttRoot = File(applicationContext.filesDir, "models/stt")
-        val stt = SherpaOnnxStt(sttRoot)
+        val lang = inputData.getString("language")
+            ?: applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("audio_language", "hinglish")
+            ?: "hinglish"
+        val spec = SttModelSpec.select(sttRoot, lang)
+        val stt = SherpaOnnxStt(sttRoot, spec = spec)
         return try {
             // Who spoke when first; the diarizer is released before recognition starts, so the models are never resident together.
             Trace.log(id, "diarization start")
@@ -167,8 +172,12 @@ object Pipeline {
     private fun name(id: Long) = "process-$id"
 
     /** Transcribe, then summarize. Two chained workers so the STT and LLM models are never loaded together. */
-    fun enqueue(context: Context, id: Long, replace: Boolean = false) {
-        val data = workDataOf(KEY_ID to id)
+    fun enqueue(context: Context, id: Long, replace: Boolean = false, language: String? = null) {
+        val lang = language ?: context.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("audio_language", null)
+        val data = workDataOf(
+            KEY_ID to id,
+            "language" to lang,
+        )
         val transcribe = OneTimeWorkRequestBuilder<TranscribeWorker>().setInputData(data).build()
         val summarize = OneTimeWorkRequestBuilder<SummarizeWorker>().setInputData(data).build()
         val policy = if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP

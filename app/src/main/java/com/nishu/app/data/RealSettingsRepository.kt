@@ -17,26 +17,36 @@ import java.io.File
 class RealSettingsRepository(private val context: Context) : SettingsRepository {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val name = MutableStateFlow(prefs.getString("user_name", "") ?: "")
+    private val language = MutableStateFlow(prefs.getString("audio_language", "hinglish") ?: "hinglish")
     private val model = ModelInfo(context)
 
-    override val info: Flow<SettingsInfo> = name.map { userName ->
+    override val info: Flow<SettingsInfo> = kotlinx.coroutines.flow.combine(name, language) { userName, lang ->
+        val sttRoot = File(context.filesDir, "models/stt")
+        val currentStt = com.nishu.app.stt.SttModelSpec.select(sttRoot, lang)
+        val langLabel = if (lang.equals("english", ignoreCase = true)) "English (Meetings)" else "Hinglish (Conversations)"
         SettingsInfo(
             modelLabel = model.label(),
             runtimeLabel = "llama.cpp (CPU)",
             soc = soc(),
             // The model loads on demand, so an installed model is "ready"; only a missing file is a problem.
             engineStatus = if (model.exists) EngineStatus.READY else EngineStatus.MODEL_MISSING,
-            sttLabel = "whisper-tiny.en",
-            languageLabel = "English (V0.1)",
+            sttLabel = currentStt.label,
+            languageLabel = langLabel,
             storageUsedBytes = usedBytes(),
             storageTotalBytes = StatFs(context.filesDir.absolutePath).totalBytes,
             userName = userName,
+            languageCode = lang,
         )
     }.flowOn(Dispatchers.IO)
 
     override suspend fun setUserName(name: String) {
         prefs.edit().putString("user_name", name).apply()
         this.name.value = name
+    }
+
+    override suspend fun setLanguage(language: String) {
+        prefs.edit().putString("audio_language", language).apply()
+        this.language.value = language
     }
 
     private fun soc(): String {
