@@ -33,6 +33,8 @@ import kotlinx.coroutines.launch
  *   reprocess:  am broadcast -a com.nishu.app.DEBUG_REPROCESS -n com.nishu.app/.debug.DebugReceiver --es ids 12,15
  *   benchmark:  am broadcast -a com.nishu.app.DEBUG_BENCH     -n com.nishu.app/.debug.DebugReceiver [--ei threads 4 --ei batch 4 --ei runs 3]
  *               results are logged under the tag NishuBench.
+ *               --es configs "repack:512,norepack:512,repack:128,norepack:128" sweeps weight repacking and micro-batch size,
+ *               logging memory after each load (the default is one run with the app's own settings).
  *
  * The benchmark runs as a foreground worker: a broadcast receiver that takes longer than a few seconds is killed as an ANR.
  */
@@ -56,6 +58,31 @@ class DebugReceiver : BroadcastReceiver() {
                     }
                 }
             }
+            "com.nishu.app.DEBUG_IMPORT" -> {
+                // am broadcast -a com.nishu.app.DEBUG_IMPORT -n com.nishu.app/.debug.DebugReceiver --es file imports/meeting.wav --es title "Weekly meeting"
+                // The WAV (16 kHz mono PCM16) must already be inside the app's files dir (see tools/import_audio.ps1).
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.Default).launch {
+                    try {
+                        val src = java.io.File(context.filesDir, intent.getStringExtra("file") ?: return@launch)
+                        val title = intent.getStringExtra("title") ?: src.nameWithoutExtension
+                        val now = System.currentTimeMillis()
+                        val id = AppGraph.database.conversations().insert(
+                            com.nishu.app.data.db.ConversationEntity(title = title, createdAt = now, status = "RECORDED"),
+                        )
+                        val dest = java.io.File(java.io.File(context.filesDir, "recordings").apply { mkdirs() }, "$id.wav")
+                        src.copyTo(dest, overwrite = true)
+                        val row = AppGraph.database.conversations().get(id)!!
+                        AppGraph.database.conversations().update(
+                            row.copy(audioPath = dest.absolutePath, durationMs = com.nishu.app.audio.WavFile.durationMs(dest)),
+                        )
+                        Log.i("NishuDebug", "imported '$title' as conversation $id (${dest.length() / 1_000_000} MB)")
+                        AppGraph.onRecorded(id)
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
             "com.nishu.app.DEBUG_BENCH" -> {
                 val data = workDataOf(
                     "threads" to intent.getIntExtra("threads", -1),
@@ -63,6 +90,7 @@ class DebugReceiver : BroadcastReceiver() {
                     "runs" to intent.getIntExtra("runs", 3),
                     "mode" to (intent.getStringExtra("mode") ?: "llm"),
                     "sttThreads" to (intent.getStringExtra("sttThreads") ?: "1,2,3,4"),
+                    "configs" to (intent.getStringExtra("configs") ?: ""),
                 )
                 WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<BenchWorker>().setInputData(data).build())
             }
@@ -120,20 +148,30 @@ class BenchWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         val info = ModelInfo(applicationContext)
         val prompt = applicationContext.assets.open("system_prompt.bin").use { it.readBytes() }
         // Exclusive: no pipeline may be running a speech model or the LLM while we measure.
+        val configs = (inputData.getString("configs") ?: "").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            .map { it.split(':').let { p -> (p[0] != "norepack") to (p.getOrNull(1)?.toIntOrNull() ?: 512) } }
+            .ifEmpty { listOf(false to 128) } // the app's own defaults
         EngineHolder.exclusively {
-            repeat(runs) { i ->
-                LlamaCppEngine.load(info.file, prompt, nCtx = 1024, nThreads = threads, nThreadsBatch = batch, prefixCache = null).use { engine ->
-                    val warm = engine.warmPrefix()
-                    // A long answer, so decode speed is averaged over many tokens rather than a 12-token reply.
-                    val r = engine.generate(
-                        listOf(ChatMessage(Role.USER, "Explain step by step how a petrol car engine works, in detail.")),
-                        SamplerProfile.Greedy, 96,
-                    )
-                    Log.i(
-                        "NishuBench",
-                        "run ${i + 1}/$runs: prefill ${warm.prefixTokens} tok in ${warm.millis} ms (${warm.prefixTokens * 1000 / warm.millis.coerceAtLeast(1)} tok/s) | " +
-                            "decode ${"%.1f".format(r.decodeTokPerSec)} tok/s over ${r.tokens} tok | ttft ${r.ttftMs} ms",
-                    )
+            for ((repack, ubatch) in configs) {
+                LlamaBridge.setOptions(repack, ubatch)
+                val label = "${if (repack) "repack" else "norepack"} ubatch=$ubatch"
+                repeat(runs) { i ->
+                    LlamaCppEngine.load(info.file, prompt, nCtx = 1024, nThreads = threads, nThreadsBatch = batch, prefixCache = null).use { engine ->
+                        val warm = engine.warmPrefix()
+                        // A long answer, so decode speed is averaged over many tokens rather than a 12-token reply.
+                        val r = engine.generate(
+                            listOf(ChatMessage(Role.USER, "Explain step by step how a petrol car engine works, in detail.")),
+                            SamplerProfile.Greedy, 96,
+                        )
+                        val mem = android.os.Debug.MemoryInfo().also { android.os.Debug.getMemoryInfo(it) }
+                        Log.i(
+                            "NishuBench",
+                            "[$label] run ${i + 1}/$runs: prefill ${warm.prefixTokens} tok in ${warm.millis} ms (${warm.prefixTokens * 1000 / warm.millis.coerceAtLeast(1)} tok/s) | " +
+                                "decode ${"%.1f".format(r.decodeTokPerSec)} tok/s over ${r.tokens} tok | ttft ${r.ttftMs} ms | " +
+                                "pss ${mem.totalPss / 1000} MB, native heap ${mem.getMemoryStat("summary.native-heap").toInt() / 1000} MB, " +
+                                "mapped ${mem.getMemoryStat("summary.private-other").toInt() / 1000} MB",
+                        )
+                    }
                 }
             }
         }

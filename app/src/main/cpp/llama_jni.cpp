@@ -48,6 +48,12 @@ Java_com_nishu_app_llm_llamacpp_LlamaBridge_loadBackends(JNIEnv *env, jobject, j
     ggml_backend_load_all_from_path(to_string(env, dir).c_str());
 }
 
+// Memory/speed knobs for models loaded afterwards: weight repacking and the micro-batch size.
+JNIEXPORT void JNICALL
+Java_com_nishu_app_llm_llamacpp_LlamaBridge_setOptions(JNIEnv *, jobject, jboolean extraBufts, jint nUbatch) {
+    nishu::set_options(extraBufts == JNI_TRUE, nUbatch);
+}
+
 // Which CPU features the loaded backend was compiled with, e.g. "NEON = 1 | DOTPROD = 1 | ...".
 JNIEXPORT jstring JNICALL
 Java_com_nishu_app_llm_llamacpp_LlamaBridge_systemInfo(JNIEnv *env, jobject) {

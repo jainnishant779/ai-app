@@ -62,6 +62,7 @@ object AppGraph {
 
     fun init(context: Context) {
         appContext = context.applicationContext
+        com.nishu.app.util.Trace.file = java.io.File(appContext.filesDir, "trace.log")
         database = NishuDatabase.create(appContext)
         EngineHolder.init(appContext)
         onRecorded = { Pipeline.enqueue(appContext, it) }

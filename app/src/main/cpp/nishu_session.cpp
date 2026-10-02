@@ -78,9 +78,21 @@ llama_sampler *build_grammar_chain(const llama_vocab *vocab, const std::string &
 
 }  // namespace
 
+// Measured on the Dimensity 7400 with Qwen3-0.6B Q4_K_M: repacking weights into RAM adds ~380 MB of heap for ~60% faster
+// prefill and no decode gain, and the batch size changes compute buffers (the 151k-token vocabulary makes the logits
+// buffer 78 MB per 128 rows). Memory is the scarcer resource, so both default to the lean setting.
+static std::atomic<bool> g_extra_bufts{false};
+static std::atomic<int> g_ubatch{128};
+
+void set_options(bool extra_bufts, int n_ubatch) {
+    g_extra_bufts = extra_bufts;
+    g_ubatch = n_ubatch;
+}
+
 Session *load(const std::string &path, int n_ctx, int n_threads, int n_threads_batch, std::string &error) {
     llama_model_params mp = llama_model_default_params();
     mp.n_gpu_layers = 0;
+    mp.use_extra_bufts = g_extra_bufts;
     llama_model *model = llama_model_load_from_file(path.c_str(), mp);
     if (model == nullptr) {
         error = "llama_model_load_from_file failed";
@@ -89,7 +101,7 @@ Session *load(const std::string &path, int n_ctx, int n_threads, int n_threads_b
     llama_context_params cp = llama_context_default_params();
     cp.n_ctx = n_ctx;
     cp.n_batch = 512;
-    cp.n_ubatch = 512;
+    cp.n_ubatch = g_ubatch;
     cp.n_threads = n_threads;
     cp.n_threads_batch = n_threads_batch;
     cp.type_k = GGML_TYPE_Q8_0;

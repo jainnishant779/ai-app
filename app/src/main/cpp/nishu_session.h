@@ -31,6 +31,9 @@ struct Session {
     std::atomic<bool> cancel{false};
 };
 
+// Applies to models loaded afterwards: weight repacking and the micro-batch size (both trade memory for speed).
+void set_options(bool extra_bufts, int n_ubatch);
+
 // Returns nullptr and fills `error` on failure.
 Session *load(const std::string &path, int n_ctx, int n_threads, int n_threads_batch, std::string &error);
 void release(Session *s);

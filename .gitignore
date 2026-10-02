@@ -39,3 +39,12 @@ Thumbs.db
 
 # Large third-party binaries fetched by tools/fetch_sherpa.ps1
 app/libs/*.aar
+
+# Local test audio (never commit)
+/*.mp3
+/*.wav
+/*.m4a
+
+# Office lock files and Python caches
+~$*
+__pycache__/

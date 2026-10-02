@@ -8,6 +8,7 @@
             <intent-filter>
                 <action android:name="com.nishu.app.DEBUG_REPROCESS" />
                 <action android:name="com.nishu.app.DEBUG_BENCH" />
+                <action android:name="com.nishu.app.DEBUG_IMPORT" />
             </intent-filter>
         </receiver>
     </application>

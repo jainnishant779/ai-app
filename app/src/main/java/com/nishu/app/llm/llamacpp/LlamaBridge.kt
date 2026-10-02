@@ -19,6 +19,8 @@ object LlamaBridge {
     }
 
     private external fun loadBackends(dir: String)
+    /** For models loaded afterwards: [extraBufts] repacks weights into RAM for speed; [nUbatch] sizes the compute buffers. */
+    external fun setOptions(extraBufts: Boolean, nUbatch: Int)
     external fun systemInfo(): String
     external fun buildInfo(): String
 
