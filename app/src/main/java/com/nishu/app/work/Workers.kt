@@ -23,6 +23,7 @@ import com.nishu.app.stt.SpeakerDiarizer
 import com.nishu.app.stt.SpeakerTurns
 import com.nishu.app.stt.SttModelMissing
 import com.nishu.app.summarize.MapReduceSummarizer
+import com.nishu.app.util.Trace
 import kotlinx.coroutines.CancellationException
 import java.io.File
 
@@ -60,8 +61,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val conv = db.conversations().get(id) ?: return Result.failure()
         promote("Transcribing…")
         db.conversations().setStatus(id, "TRANSCRIBING", ProcessingStage.TRANSCRIBING.name)
+        Trace.begin(id, "pipeline: ${"%.1f".format(conv.audioPath?.let { File(it).length() / 32000.0 / 60 } ?: 0.0)} min of audio")
         // One heavy model at a time across all recordings: waits for any LLM work and unloads the LLM first.
-        return EngineHolder.exclusively { transcribe(id, conv.audioPath) }
+        return EngineHolder.exclusively {
+            Trace.log(id, "got exclusive access (LLM unloaded)")
+            transcribe(id, conv.audioPath)
+        }
     }
 
     private suspend fun transcribe(id: Long, audioPath: String?): Result {
@@ -74,17 +79,30 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val sttRoot = File(applicationContext.filesDir, "models/stt")
         val stt = SherpaOnnxStt(sttRoot)
         return try {
-            // A re-run starts from scratch, so no stale summary or tasks outlive a new transcript.
-            db.transcripts().clear(id)
-            db.summaries().clear(id)
-            db.tasks().clear(id)
-            db.decisions().clear(id)
             // Who spoke when first; the diarizer is released before recognition starts, so the models are never resident together.
+            Trace.log(id, "diarization start")
             val turns = runCatching { SpeakerDiarizer(sttRoot).diarize(audio) }
                 .onFailure { Log.w(TAG, "speaker identification skipped", it) }
                 .getOrDefault(emptyList())
             Log.i(TAG, "diarization: ${turns.map { it.speaker }.distinct().size} speaker(s), ${turns.size} turn(s)")
-            stt.transcribe(audio, onProgress = { setProgressAsync(workDataOf("p" to it)) }, speakerTurns = turns) { seg ->
+            Trace.log(id, "diarization done: ${turns.map { it.speaker }.distinct().size} speaker(s), ${turns.size} turn(s)")
+            // Cleared only now, so the old transcript stays visible while speakers are identified; a re-run starts from scratch, so no stale summary or tasks outlive a new transcript.
+            db.transcripts().clear(id)
+            db.summaries().clear(id)
+            db.tasks().clear(id)
+            db.decisions().clear(id)
+            Trace.log(id, "stt start (${stt.modelId})")
+            var segCount = 0
+            var lastProgressLog = 0f
+            stt.transcribe(
+                audio,
+                onProgress = {
+                    setProgressAsync(workDataOf("p" to it))
+                    if (it - lastProgressLog >= 0.1f) { lastProgressLog = it; Trace.log(id, "stt ${(it * 100).toInt()}% (${segCount} segments)") }
+                },
+                speakerTurns = turns,
+            ) { seg ->
+                segCount++
                 db.transcripts().insert(
                     TranscriptSegmentEntity(
                         conversationId = id, startMs = seg.startMs, endMs = seg.endMs, text = seg.text,
@@ -94,6 +112,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
             db.conversations().get(id)?.let { db.conversations().update(it.copy(sttModelId = stt.modelId)) }
             db.conversations().setStatus(id, "TRANSCRIBED", null)
+            Trace.log(id, "stt done: $segCount segments")
             Result.success()
         } catch (e: CancellationException) {
             throw e
@@ -119,10 +138,14 @@ class SummarizeWorker(context: Context, params: WorkerParameters) : CoroutineWor
         promote("Summarizing…")
         val grammar = applicationContext.assets.open("grammars/extract.gbnf").use { String(it.readBytes(), Charsets.UTF_8) }
         return try {
+            Trace.log(id, "summarize: waiting for the LLM")
             EngineHolder.withEngine { engine ->
+                Trace.log(id, "summarize: LLM ready, prefix ${engine.systemPrefixTokens} tok, ctx ${engine.contextTokens}")
                 MapReduceSummarizer(db, engine, grammar, modelId = "qwen3-0.6b-q4_k_m").run(id)
             }
             val done = db.conversations().get(id)
+            Trace.log(id, "summarize done: status=${done?.status} detail=${done?.statusDetail}")
+            Trace.end(id)
             if (done != null) com.nishu.app.CompletionNotifier.notifyDone(applicationContext, id, done.title, done.status == "DONE")
             Result.success()
         } catch (e: CancellationException) {

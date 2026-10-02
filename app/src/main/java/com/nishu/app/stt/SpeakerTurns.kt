@@ -85,3 +85,50 @@ object SpeechChunks {
         return (0 until parts).map { it * size until minOf(total, (it + 1) * size) }.filter { !it.isEmpty() }
     }
 }
+
+/** Speech from one speaker, ready for one recognizer call. */
+class SpeechBatch(val startMs: Long, val endMs: Long, val speaker: Int?, val samples: FloatArray)
+
+/**
+ * Joins neighbouring speech segments of the same speaker into one recognizer call of at most [maxSamples]. Every call
+ * costs a fixed amount however short the audio, and a one-word segment gives whisper no context to read it by.
+ */
+class SpeechBatcher(
+    private val maxSamples: Int,
+    private val maxGapMs: Long = 2_000,
+    private val sampleRate: Int = 16_000,
+) {
+    private var startMs = 0L
+    private var endMs = 0L
+    private var speaker: Int? = null
+    private var parts = ArrayList<FloatArray>()
+    private var size = 0
+
+    /** Adds speech; returns the batch this closed, if any. */
+    fun add(startMs: Long, endMs: Long, speaker: Int?, samples: FloatArray): SpeechBatch? {
+        val gap = sampleRate / 5 // a short silence between joined segments, so words do not run together
+        val closed = if (size > 0 && (speaker != this.speaker || startMs - this.endMs > maxGapMs || size + gap + samples.size > maxSamples)) flush() else null
+        if (size == 0) {
+            this.startMs = startMs
+            this.speaker = speaker
+        } else {
+            parts += FloatArray(gap)
+            size += gap
+        }
+        this.endMs = endMs
+        parts += samples
+        size += samples.size
+        return closed
+    }
+
+    fun flush(): SpeechBatch? {
+        if (size == 0) return null
+        val out = FloatArray(size)
+        var at = 0
+        for (p in parts) { p.copyInto(out, at); at += p.size }
+        val batch = SpeechBatch(startMs, endMs, speaker, out)
+        parts = ArrayList()
+        size = 0
+        return batch
+    }
+}

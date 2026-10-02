@@ -74,6 +74,7 @@ class SherpaOnnxStt(
                 modelConfig.modelType = "whisper"
             })
             val pre = AudioPreprocessor(gain)
+            val batcher = SpeechBatcher(BATCH_SAMPLES)
             try {
                 WavReader(wav).use { reader ->
                     require(reader.sampleRate == SAMPLE_RATE) { "expected 16 kHz audio, got ${reader.sampleRate}" }
@@ -84,11 +85,12 @@ class SherpaOnnxStt(
                         if (samples.isEmpty()) break
                         vad.acceptWaveform(if (preprocess) pre.process(samples) else samples)
                         done += samples.size
-                        drain(vad, recognizer, speakerTurns, onSegment)
+                        drain(vad, recognizer, speakerTurns, batcher, onSegment)
                         if (reader.totalSamples > 0) onProgress(done.toFloat() / reader.totalSamples)
                     }
                     vad.flush()
-                    drain(vad, recognizer, speakerTurns, onSegment)
+                    drain(vad, recognizer, speakerTurns, batcher, onSegment)
+                    batcher.flush()?.let { recognize(recognizer, it, onSegment) }
                     onProgress(1f)
                 }
             } finally {
@@ -103,6 +105,7 @@ class SherpaOnnxStt(
         vad: Vad,
         recognizer: OfflineRecognizer,
         turns: List<SpeakerTurn>,
+        batcher: SpeechBatcher,
         onSegment: suspend (Seg) -> Unit,
     ) {
         while (!vad.empty()) {
@@ -121,11 +124,15 @@ class SherpaOnnxStt(
                     val startMs = segStartMs + a * 1000L / SAMPLE_RATE
                     val endMs = segStartMs + b * 1000L / SAMPLE_RATE
                     val samples = if (a == 0 && b == seg.samples.size) seg.samples else seg.samples.copyOfRange(a, b)
-                    val text = recognize(recognizer, samples, endMs - startMs)
-                    if (text != null) onSegment(Seg(startMs, endMs, text, piece.speaker))
+                    batcher.add(startMs, endMs, piece.speaker, samples)?.let { recognize(recognizer, it, onSegment) }
                 }
             }
         }
+    }
+
+    private suspend fun recognize(recognizer: OfflineRecognizer, batch: SpeechBatch, onSegment: suspend (Seg) -> Unit) {
+        val text = recognize(recognizer, batch.samples, batch.endMs - batch.startMs)
+        if (text != null) onSegment(Seg(batch.startMs, batch.endMs, text, batch.speaker))
     }
 
     private fun recognize(recognizer: OfflineRecognizer, samples: FloatArray, durationMs: Long): String? {
@@ -148,5 +155,6 @@ class SherpaOnnxStt(
         const val WINDOW = 512
         const val MIN_SAMPLES = SAMPLE_RATE / 4 // under 0.25 s there is nothing to recognize
         const val MAX_WHISPER_SAMPLES = 28 * SAMPLE_RATE // whisper reads 30 s; stay clear of the edge
+        const val BATCH_SAMPLES = 25 * SAMPLE_RATE
     }
 }

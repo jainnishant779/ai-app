@@ -75,3 +75,48 @@ class SpeakerTurnsTest {
         assertEquals("S1", SpeakerTurns.label(0)); assertEquals("S3", SpeakerTurns.label(2)); assertNull(SpeakerTurns.label(null))
     }
 }
+
+class SpeechBatcherTest {
+    private fun floats(ms: Int) = FloatArray(ms * 16)
+
+    @Test
+    fun neighbouringSegmentsOfOneSpeakerShareACall() {
+        val b = SpeechBatcher(maxSamples = 25 * 16_000)
+        assertNull(b.add(0, 2_000, 0, floats(2_000)))
+        assertNull(b.add(3_000, 5_000, 0, floats(2_000)))
+        val batch = b.flush()!!
+        assertEquals(0L, batch.startMs)
+        assertEquals(5_000L, batch.endMs)
+        assertEquals(floats(4_200).size, batch.samples.size) // both segments plus a 200 ms silence
+    }
+
+    @Test
+    fun aSpeakerChangeStartsANewCall() {
+        val b = SpeechBatcher(maxSamples = 25 * 16_000)
+        b.add(0, 2_000, 0, floats(2_000))
+        val closed = b.add(2_100, 4_000, 1, floats(1_900))!!
+        assertEquals(0, closed.speaker)
+        assertEquals(1, b.flush()!!.speaker)
+    }
+
+    @Test
+    fun aLongPauseStartsANewCall() {
+        val b = SpeechBatcher(maxSamples = 25 * 16_000, maxGapMs = 2_000)
+        b.add(0, 2_000, null, floats(2_000))
+        assertEquals(2_000L, b.add(10_000, 12_000, null, floats(2_000))!!.endMs)
+    }
+
+    @Test
+    fun aCallNeverExceedsTheLimit() {
+        val b = SpeechBatcher(maxSamples = 10 * 16_000)
+        b.add(0, 6_000, null, floats(6_000))
+        val closed = b.add(6_100, 12_100, null, floats(6_000))!!
+        assertEquals(6_000L, closed.endMs)
+        assertTrue(b.flush()!!.samples.size <= 10 * 16_000)
+    }
+
+    @Test
+    fun emptyBatcherFlushesNothing() {
+        assertNull(SpeechBatcher(16_000).flush())
+    }
+}

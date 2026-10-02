@@ -10,6 +10,7 @@ import com.nishu.app.llm.FinishReason
 import com.nishu.app.llm.LLMEngine
 import com.nishu.app.llm.Role
 import com.nishu.app.llm.SamplerProfile
+import com.nishu.app.util.Trace
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -27,7 +28,7 @@ class MapReduceSummarizer(
     private companion object {
         const val GEN_RESERVE = 160
         const val SLACK = 30
-        const val MAX_CHUNKS = 12
+        const val MAX_CHUNKS = 36
         const val TARGET_FRACTION = 0.875
     }
 
@@ -53,20 +54,25 @@ class MapReduceSummarizer(
         val mapCap = engine.turnTokenBudget - wrapperTokens(Prompts::map) - GEN_RESERVE - SLACK
         val allChunks = Chunker(engine::tokenCount).chunk(segments, mapCap, (mapCap * TARGET_FRACTION).toInt())
         val chunks = allChunks.take(maxChunks)
+        Trace.log(conversationId, "chunking: ${segments.size} segments -> ${allChunks.size} chunks (using ${chunks.size}), cap $mapCap tok, " +
+            "transcript ${engine.tokenCount(segments.joinToString(" "))} tok")
 
         var failed = 0
         val mapOutputs = mutableListOf<String>()
-        for (chunk in chunks) {
+        for ((i, chunk) in chunks.withIndex()) {
             val out = generateClean(Prompts.map(chunk), 160)
                 .ifBlank { generateClean(Prompts.map(chunk), 160) } // one retry on empty output
             if (out.isBlank()) failed++ else mapOutputs += out
+            Trace.log(conversationId, "map ${i + 1}/${chunks.size}: ${engine.tokenCount(chunk)} tok in, ${if (out.isBlank()) "EMPTY" else "${out.length} chars out"}")
         }
         if (mapOutputs.isEmpty()) {
             conversations.setStatus(conversationId, "FAILED", ProcessingStage.SUMMARIZING.name, "Summary unavailable")
             return
         }
 
+        Trace.log(conversationId, "reduce start (${mapOutputs.size} map outputs)")
         val bullets = reduce(mapOutputs)
+        Trace.log(conversationId, "reduce done: ${bullets.lines().size} lines")
         db.summaries().upsert(
             SummaryEntity(conversationId, bullets, chunks.size, failed, System.currentTimeMillis(), modelId),
         )
@@ -74,6 +80,7 @@ class MapReduceSummarizer(
         onStage(ProcessingStage.EXTRACTING_TASKS)
         conversations.setStatus(conversationId, "SUMMARIZING", ProcessingStage.EXTRACTING_TASKS.name)
         val (extraction, confidence) = extract(bullets, segments)
+        Trace.log(conversationId, "extract: ${extraction.tasks.size} tasks, ${extraction.decisions.size} decisions via $confidence")
         db.tasks().clear(conversationId)
         db.tasks().insertAll(
             extraction.tasks.map { TaskEntity(conversationId = conversationId, text = it.text, owner = it.owner, dueHint = it.dueHint, extractionConfidence = confidence) },
@@ -88,7 +95,7 @@ class MapReduceSummarizer(
 
         onStage(ProcessingStage.SAVING)
         conversations.setStatus(conversationId, "SUMMARIZING", ProcessingStage.SAVING.name)
-        val detail = if (allChunks.size > chunks.size) "Summary covers the first ~${chunks.size * 2} minutes" else null
+        val detail = if (allChunks.size > chunks.size) "Summary covers the first ${chunks.size * 100 / allChunks.size}% of the recording" else null
         conversations.setStatus(conversationId, "DONE", null, detail)
     }
 

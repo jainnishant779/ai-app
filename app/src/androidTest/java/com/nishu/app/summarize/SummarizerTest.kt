@@ -65,7 +65,7 @@ class SummarizerTest {
 
     private fun longTranscript(n: Int) = Array(n) { i -> "segment$i " + "word ".repeat(20).trim() }
 
-    private suspend fun run(engine: FakeEngine, id: Long, maxChunks: Int = 12) =
+    private suspend fun run(engine: FakeEngine, id: Long, maxChunks: Int = 36) =
         MapReduceSummarizer(db, engine, grammar, "test", maxChunks).run(id)
 
     private val goodJson = "{\"tasks\":[{\"text\":\"Send the deck\",\"due\":\"Mon\"}],\"decisions\":[\"Use vendor A\"]}"

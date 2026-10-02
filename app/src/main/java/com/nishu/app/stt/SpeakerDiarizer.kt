@@ -67,6 +67,7 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
          * with both embedding models. Higher merges different people.
          */
         const val DEFAULT_THRESHOLD = 0.8f
-        const val MAX_SAMPLES = 30L * 60 * 16_000
+        /** Measured on a noisy 6+ person meeting: about 0.3-0.6x realtime, so longer recordings would stall the transcript for many minutes. */
+        const val MAX_SAMPLES = 20L * 60 * 16_000
     }
 }
