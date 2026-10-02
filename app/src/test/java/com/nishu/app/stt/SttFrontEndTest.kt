@@ -90,4 +90,11 @@ class SttFrontEndTest {
         assertEquals("hello there", SttText.clean("hello [pause] there", 5_000))
         assertEquals("send the deck", SttText.clean("send the deck [", 5_000))
     }
+
+    @Test
+    fun nameMistranscriptionsAreCorrected() {
+        assertEquals("Hello, I am Nishant Jain", SttText.clean("Hello, I am Nisanjian", 4_000))
+        assertEquals("Hello, I am Nishant Jain", SttText.clean("Hello, I am Nissan Jain", 4_000))
+        assertEquals("My name is Rahul Sharma", SttText.clean("My name is rahul sharma", 4_000, userName = "Rahul Sharma"))
+    }
 }

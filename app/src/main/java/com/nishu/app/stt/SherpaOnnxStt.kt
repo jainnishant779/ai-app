@@ -28,6 +28,7 @@ class SherpaOnnxStt(
     private val numThreads: Int = 4,
     private val provider: String = "cpu",
     private val preprocess: Boolean = true,
+    private val userName: String = "",
 ) : SttEngine {
     override val modelId = spec.id
 
@@ -55,10 +56,10 @@ class SherpaOnnxStt(
             val vad = Vad(null, VadModelConfig().apply {
                 sileroVadModelConfig = SileroVadModelConfig().apply {
                     model = vadPath
-                    threshold = 0.5f
-                    minSilenceDuration = 0.25f
+                    threshold = 0.30f
+                    minSilenceDuration = 0.30f
                     minSpeechDuration = 0.25f
-                    maxSpeechDuration = 28f
+                    maxSpeechDuration = 12f
                     windowSize = WINDOW
                 }
                 sampleRate = SAMPLE_RATE
@@ -160,7 +161,7 @@ class SherpaOnnxStt(
             val raw = recognizer.getResult(stream).text
             val ms = (System.nanoTime() - t0) / 1_000_000
             android.util.Log.i("NishuStt", "segment ${durationMs} ms of audio -> decode $ms ms, ${raw.length} chars")
-            return SttText.clean(raw, durationMs)
+            return SttText.clean(raw, durationMs, userName)
         } finally {
             stream.release()
         }
@@ -170,7 +171,7 @@ class SherpaOnnxStt(
         const val SAMPLE_RATE = 16_000
         const val WINDOW = 512
         const val MIN_SAMPLES = SAMPLE_RATE / 4 // under 0.25 s there is nothing to recognize
-        const val MAX_WHISPER_SAMPLES = 28 * SAMPLE_RATE // whisper reads 30 s; stay clear of the edge
-        const val BATCH_SAMPLES = 25 * SAMPLE_RATE
+        const val MAX_WHISPER_SAMPLES = 12 * SAMPLE_RATE // 12 seconds max: avoids Whisper premature EOT on internal pauses
+        const val BATCH_SAMPLES = 10 * SAMPLE_RATE       // 10 seconds max batch
     }
 }

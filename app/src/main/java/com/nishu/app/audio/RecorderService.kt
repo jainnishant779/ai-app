@@ -84,6 +84,12 @@ class RecorderService : Service() {
         val minBuf = AudioRecord.getMinBufferSize(WavFile.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val bufSize = maxOf(minBuf, WavFile.BYTES_PER_SECOND)
         val rec = createRecord(bufSize) ?: run { fail(); return }
+        val agc = if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
+            runCatching { android.media.audiofx.AutomaticGainControl.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull()
+        } else null
+        val ns = if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
+            runCatching { android.media.audiofx.NoiseSuppressor.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull()
+        } else null
         val writer = PcmWriter(file)
         val chunk = ByteArray(WavFile.BYTES_PER_SECOND / 10) // 100 ms
         var sinceFlush = 0
@@ -108,6 +114,8 @@ class RecorderService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "recording failed", e)
         } finally {
+            runCatching { agc?.release() }
+            runCatching { ns?.release() }
             runCatching { rec.stop() }
             rec.release()
             writer.finish()

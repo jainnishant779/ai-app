@@ -47,8 +47,8 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
             embedding = SpeakerEmbeddingExtractorConfig(embPath, 2, false, "cpu")
             clustering.numClusters = -1 // unknown number of speakers; the threshold decides
             clustering.threshold = threshold
-            minDurationOn = 0.3f
-            minDurationOff = 0.5f
+            minDurationOn = 0.5f
+            minDurationOff = 0.6f
         }
         val sd = OfflineSpeakerDiarization(null, config)
         try {
@@ -63,10 +63,10 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
 
     companion object {
         /**
-         * Measured on two-speaker samples: 0.5 over-splits one voice into 3-4 people; 0.8 finds the right two
-         * with both embedding models. Higher merges different people.
+         * Measured on real mobile recordings: 0.80 over-splits a single speaker's variations into 3+ people;
+         * 0.88 merges pitch variations of the same person while still separating distinct voices.
          */
-        const val DEFAULT_THRESHOLD = 0.8f
+        const val DEFAULT_THRESHOLD = 0.88f
         /** Measured on a noisy 6+ person meeting: about 0.3-0.6x realtime, so longer recordings would stall the transcript for many minutes. */
         const val MAX_SAMPLES = 20L * 60 * 16_000
     }

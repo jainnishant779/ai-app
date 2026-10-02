@@ -38,11 +38,13 @@ class AudioPreprocessor(private val gain: Float, sampleRate: Int = 16_000, cutof
         const val MIN_GAIN_DB = -6f
         private const val FRAME = 400 // 25 ms at 16 kHz
 
-        /** Gain that brings the loud (speech) frames to [TARGET_SPEECH_DB], bounded so noise is not blown up. */
+        /** Gain that brings speech frames to [TARGET_SPEECH_DB], bounded so noise is not blown up. */
         fun gainFor(frameDb: List<Float>): Float {
             if (frameDb.isEmpty()) return 1f
-            val sorted = frameDb.sorted()
-            val speechDb = sorted[((sorted.size - 1) * 0.9).toInt()]
+            val active = frameDb.filter { it > -55f }
+            val frames = if (active.size >= frameDb.size / 10) active else frameDb
+            val sorted = frames.sorted()
+            val speechDb = sorted[((sorted.size - 1) * 0.75).toInt()]
             val db = (TARGET_SPEECH_DB - speechDb).coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
             return 10f.pow(db / 20f)
         }

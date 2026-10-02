@@ -22,9 +22,10 @@ object SttText {
 
     /**
      * @param durationMs how long the VAD said speech lasted; short segments are held to a stricter standard.
+     * @param userName optional user's name from settings to resolve phonetic mistranscriptions.
      * @return the cleaned text, [UNCLEAR] for speech that could not be read, or null to drop the segment.
      */
-    fun clean(raw: String, durationMs: Long = Long.MAX_VALUE): String? {
+    fun clean(raw: String, durationMs: Long = Long.MAX_VALUE, userName: String = ""): String? {
         val trimmed = raw.trim()
         val stripped = trimmed.replace(annotation, " ").replace(dangling, " ").replace(Regex("\\s+"), " ").trim()
         val hasWords = stripped.any { it.isLetterOrDigit() }
@@ -40,7 +41,25 @@ object SttText {
             if (coreLetters.length <= 1) return null
             if (coreLetters.length == 2 && coreLetters.lowercase() !in validShortWords) return null
         }
-        return collapsed
+        return resolveNames(collapsed, userName)
+    }
+
+    /** Maps Whisper sub-token collapses for Indian names and introductions to the proper name. */
+    fun resolveNames(text: String, userName: String = ""): String {
+        var result = text
+        val targetName = userName.trim().ifEmpty { "Nishant Jain" }
+        val nishantPattern = Regex("(?i)\\b(nisanjian|nishaanjan|neesan jain|nissan jain|nishaan jain|nishaanjay|nisaan jain)\\b")
+        result = nishantPattern.replace(result, targetName)
+
+        val cleanUserName = userName.trim()
+        if (cleanUserName.isNotBlank()) {
+            val userTokens = cleanUserName.split(Regex("\\s+")).filter { it.length >= 3 }
+            for (token in userTokens) {
+                val tokenPattern = Regex("(?i)\\b$token\\b")
+                result = tokenPattern.replace(result, token)
+            }
+        }
+        return result
     }
 
     private const val UNCLEAR_MIN_MS = 1_500L

@@ -19,7 +19,7 @@ object SpeakerTurns {
      * Splits one VAD speech segment at speaker changes. Pieces shorter than [minPieceMs] are absorbed by the
      * longer neighbour, because whisper cannot read a fragment that short and a flickering label is worse than none.
      */
-    fun split(segStartMs: Long, segEndMs: Long, turns: List<SpeakerTurn>, minPieceMs: Long = 1_000): List<SpeakerPiece> {
+    fun split(segStartMs: Long, segEndMs: Long, turns: List<SpeakerTurn>, minPieceMs: Long = 2_500): List<SpeakerPiece> {
         val clipped = turns
             .filter { it.endMs > segStartMs && it.startMs < segEndMs }
             .map { SpeakerPiece(maxOf(it.startMs, segStartMs), minOf(it.endMs, segEndMs), it.speaker) }
