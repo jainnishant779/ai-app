@@ -58,7 +58,28 @@ object SpeakerTurns {
             }
             pieces = mergeSame(pieces.toMutableList().also { it[i] = it[i].copy(speaker = adopt.speaker) })
         }
-        return pieces
+        // Propagate null speakers: short/quiet utterances that the diarizer could not label
+        // inherit the nearest non-null speaker (prefer the next speaker, then the previous).
+        return propagateNullSpeakers(pieces)
+    }
+
+    /** Replaces null speakers with the nearest non-null neighbor (next preferred, then previous). */
+    private fun propagateNullSpeakers(pieces: List<SpeakerPiece>): List<SpeakerPiece> {
+        if (pieces.all { it.speaker != null } || pieces.all { it.speaker == null }) return pieces
+        val result = pieces.toMutableList()
+        for (i in result.indices) {
+            if (result[i].speaker != null) continue
+            // Look forward first, then backward
+            val next = (i + 1..result.lastIndex).firstOrNull { result[it].speaker != null }
+            val prev = (i - 1 downTo 0).firstOrNull { result[it].speaker != null }
+            val donor = when {
+                next != null -> result[next].speaker
+                prev != null -> result[prev].speaker
+                else -> null
+            }
+            if (donor != null) result[i] = result[i].copy(speaker = donor)
+        }
+        return mergeSame(result)
     }
 
     private fun mergeSame(pieces: List<SpeakerPiece>): List<SpeakerPiece> {

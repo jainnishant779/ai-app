@@ -79,7 +79,9 @@ class DebugReceiver : BroadcastReceiver() {
                             com.nishu.app.data.db.ConversationEntity(title = title, createdAt = now, status = "RECORDED"),
                         )
                         val dest = java.io.File(java.io.File(context.filesDir, "recordings").apply { mkdirs() }, "$id.wav")
-                        src.copyTo(dest, overwrite = true)
+                        // Anything other than our own WAV goes through the same decoder as the Import button.
+                        if (src.extension.equals("wav", true)) src.copyTo(dest, overwrite = true)
+                        else com.nishu.app.audio.AudioImporter.import(context, android.net.Uri.fromFile(src), dest)
                         val row = AppGraph.database.conversations().get(id)!!
                         AppGraph.database.conversations().update(
                             row.copy(audioPath = dest.absolutePath, durationMs = com.nishu.app.audio.WavFile.durationMs(dest)),

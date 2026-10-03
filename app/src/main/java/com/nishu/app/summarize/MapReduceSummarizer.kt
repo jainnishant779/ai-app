@@ -24,11 +24,13 @@ class MapReduceSummarizer(
     private val extractGrammar: String,
     private val modelId: String? = null,
     private val maxChunks: Int = MAX_CHUNKS,
+    private val minWords: Int = MIN_WORDS,
 ) {
     private companion object {
         const val GEN_RESERVE = 160
         const val SLACK = 30
         const val MAX_CHUNKS = 36
+        const val MIN_WORDS = 25
         const val TARGET_FRACTION = 0.875
     }
 
@@ -45,6 +47,16 @@ class MapReduceSummarizer(
         val segments = db.transcripts().get(conversationId).map { it.text }
         if (segments.isEmpty()) {
             conversations.setStatus(conversationId, "DONE", null, "No speech was detected")
+            return
+        }
+        // A greeting or a couple of words has nothing to summarize; the model then invents "Decision: the user is
+        // greeting" (seen on a 17 s recording). The transcript itself is the result.
+        val wordCount = segments.sumOf { s -> s.split(Regex("\\s+")).count { it.any(Char::isLetterOrDigit) } }
+        if (wordCount < minWords) {
+            db.summaries().clear(conversationId)
+            db.tasks().clear(conversationId)
+            db.decisions().clear(conversationId)
+            conversations.setStatus(conversationId, "DONE", null, "Too short to summarize")
             return
         }
 

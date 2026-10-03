@@ -83,8 +83,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             ?: prefs.getString("audio_language", "hinglish")
             ?: "hinglish"
         val userName = prefs.getString("user_name", "") ?: ""
+        val customVocab = prefs.getString("custom_vocabulary", "") ?: ""
         val spec = SttModelSpec.select(sttRoot, lang)
-        val stt = SherpaOnnxStt(sttRoot, spec = spec, userName = userName)
+        val stt = SherpaOnnxStt(sttRoot, spec = spec, userName = userName, customVocabulary = customVocab)
         return try {
             // Who spoke when first; the diarizer is released before recognition starts, so the models are never resident together.
             Trace.log(id, "diarization start")

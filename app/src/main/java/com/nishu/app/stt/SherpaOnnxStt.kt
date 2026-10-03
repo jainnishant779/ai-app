@@ -29,8 +29,10 @@ class SherpaOnnxStt(
     private val provider: String = "cpu",
     private val preprocess: Boolean = true,
     private val userName: String = "",
+    private val customVocabulary: String = "",
 ) : SttEngine {
     override val modelId = spec.id
+    @Volatile private var isFirstSegment = true
 
     private fun need(f: File): String {
         if (!f.exists()) throw SttModelMissing("missing STT model file: ${f.path} (run tools/push_models.ps1)")
@@ -50,16 +52,19 @@ class SherpaOnnxStt(
         val tokens = if (qwen) "" else need(spec.tokens(modelRoot))
         val convFrontend = if (qwen) need(spec.convFrontend(modelRoot)) else ""
         val tokenizer = if (qwen) File(need(File(spec.tokenizerDir(modelRoot), "vocab.json"))).parent!! else ""
-        val gain = if (preprocess) AudioPreprocessor.measureGain(wav) else 1f
+        val (gain, noiseFloorDb) = if (preprocess) AudioPreprocessor.measure(wav) else (1f to AudioPreprocessor.DEFAULT_NOISE_FLOOR_DB)
 
         withContext(Dispatchers.Default) {
             val vad = Vad(null, VadModelConfig().apply {
                 sileroVadModelConfig = SileroVadModelConfig().apply {
                     model = vadPath
+                    // Measured with tools/stt_pipeline_sweep.py (meeting WER vs Qwen3-ASR, noisy and Hinglish clips):
+                    // 0.30 keeps soft speech at a recording's start that 0.50 drops; long chunks gave the lowest WER
+                    // (0.19/0.24 vs 0.21/0.26 at 12 s) with ~2.3x fewer recognizer calls.
                     threshold = 0.30f
-                    minSilenceDuration = 0.30f
+                    minSilenceDuration = 0.45f
                     minSpeechDuration = 0.25f
-                    maxSpeechDuration = 12f
+                    maxSpeechDuration = 27f // with the lead and tail padding this stays under MAX_WHISPER_SAMPLES
                     windowSize = WINDOW
                 }
                 sampleRate = SAMPLE_RATE
@@ -90,7 +95,8 @@ class SherpaOnnxStt(
                 modelConfig.numThreads = numThreads
                 modelConfig.provider = provider
             })
-            val pre = AudioPreprocessor(gain)
+            val pre = AudioPreprocessor(gain, noiseFloorDb)
+            isFirstSegment = true
             val batcher = SpeechBatcher(BATCH_SAMPLES)
             try {
                 WavReader(wav).use { reader ->
@@ -130,18 +136,38 @@ class SherpaOnnxStt(
             vad.pop()
             val segStartMs = seg.start * 1000L / SAMPLE_RATE
             val segEndMs = segStartMs + seg.samples.size * 1000L / SAMPLE_RATE
+
+            // Prepend 320 ms of silence before the very first VAD segment so Whisper's encoder
+            // sees a clean silence→speech onset, matching its training distribution.
+            // Also append 250 ms tail silence padding so trailing syllables (e.g. "-ta hai", "-gi")
+            // are cleanly resolved before Whisper hits the EOT token.
+            val lead = if (isFirstSegment) SILENCE_PREFIX else 0
+            isFirstSegment = false
+            // [lead] silence + speech + TAIL_PAD silence. Indices into the speech are shifted by [lead].
+            val segSamples = FloatArray(lead + seg.samples.size + TAIL_PAD).also { seg.samples.copyInto(it, lead) }
+            val speechEnd = lead + seg.samples.size
+
             // One piece per speaker; without speaker info this is the whole segment, as before.
-            for (piece in SpeakerTurns.split(segStartMs, segEndMs, turns)) {
-                val from = ((piece.startMs - segStartMs) * SAMPLE_RATE / 1000).toInt().coerceIn(0, seg.samples.size)
-                val to = ((piece.endMs - segStartMs) * SAMPLE_RATE / 1000).toInt().coerceIn(from, seg.samples.size)
+            val pieces = SpeakerTurns.split(segStartMs, segEndMs, turns)
+            for ((pieceIdx, piece) in pieces.withIndex()) {
+                val from = lead + ((piece.startMs - segStartMs) * SAMPLE_RATE / 1000).toInt().coerceIn(0, seg.samples.size)
+                val to = lead + ((piece.endMs - segStartMs) * SAMPLE_RATE / 1000).toInt().coerceIn(from - lead, seg.samples.size)
                 if (to - from < MIN_SAMPLES) continue
-                for (part in SpeechChunks.split(to - from, MAX_WHISPER_SAMPLES)) {
-                    val a = from + part.first
-                    val b = from + part.last + 1
-                    val startMs = segStartMs + a * 1000L / SAMPLE_RATE
-                    val endMs = segStartMs + b * 1000L / SAMPLE_RATE
-                    val samples = if (a == 0 && b == seg.samples.size) seg.samples else seg.samples.copyOfRange(a, b)
-                    batcher.add(startMs, endMs, piece.speaker, samples)?.let { recognize(recognizer, it, onSegment) }
+
+                // 200 ms of the neighbouring piece on each side, so a word on a speaker boundary keeps its onset;
+                // the first piece also gets the lead silence and the last one the tail silence.
+                val padFrom = if (pieceIdx > 0) maxOf(lead, from - CONTEXT_PAD) else 0
+                val padTo = if (pieceIdx < pieces.lastIndex) minOf(speechEnd, to + CONTEXT_PAD) else segSamples.size
+
+                // Whisper reads 30 s. The padding must never push a segment over that limit and cut it mid-word.
+                for (part in SpeechChunks.split(padTo - padFrom, MAX_WHISPER_SAMPLES)) {
+                    val a = padFrom + part.first
+                    val b = padFrom + part.last + 1
+                    // Each part keeps its own time span, clamped to the piece (padding is not speech time).
+                    val startMs = segStartMs + (maxOf(a, from) - lead) * 1000L / SAMPLE_RATE
+                    val endMs = segStartMs + (minOf(b, to) - lead) * 1000L / SAMPLE_RATE
+                    batcher.add(startMs, maxOf(startMs, endMs), piece.speaker, segSamples.copyOfRange(a, b))
+                        ?.let { recognize(recognizer, it, onSegment) }
                 }
             }
         }
@@ -161,7 +187,7 @@ class SherpaOnnxStt(
             val raw = recognizer.getResult(stream).text
             val ms = (System.nanoTime() - t0) / 1_000_000
             android.util.Log.i("NishuStt", "segment ${durationMs} ms of audio -> decode $ms ms, ${raw.length} chars")
-            return SttText.clean(raw, durationMs, userName)
+            return SttText.clean(raw, durationMs, userName, customVocabulary)
         } finally {
             stream.release()
         }
@@ -171,7 +197,15 @@ class SherpaOnnxStt(
         const val SAMPLE_RATE = 16_000
         const val WINDOW = 512
         const val MIN_SAMPLES = SAMPLE_RATE / 4 // under 0.25 s there is nothing to recognize
-        const val MAX_WHISPER_SAMPLES = 12 * SAMPLE_RATE // 12 seconds max: avoids Whisper premature EOT on internal pauses
-        const val BATCH_SAMPLES = 10 * SAMPLE_RATE       // 10 seconds max batch
+        /**
+         * Whisper reads 30 s; stay clear of the edge. This only guards the model's input size. How long a segment is
+         * allowed to be is the VAD's max speech setting: at 12 s here, a 12 s segment plus its padding was split in
+         * half mid-word and both halves got the same timestamp (seen on the phone, conversations 46 and 65).
+         */
+        const val MAX_WHISPER_SAMPLES = 28 * SAMPLE_RATE
+        const val BATCH_SAMPLES = 25 * SAMPLE_RATE
+        const val SILENCE_PREFIX = SAMPLE_RATE * 320 / 1000 // 320 ms of silence before first segment
+        const val TAIL_PAD = SAMPLE_RATE * 250 / 1000       // 250 ms tail hangover padding
+        const val CONTEXT_PAD = SAMPLE_RATE * 200 / 1000    // 200 ms context overlap at speaker boundaries
     }
 }

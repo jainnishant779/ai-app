@@ -48,3 +48,15 @@ app/libs/*.aar
 # Office lock files and Python caches
 ~$*
 __pycache__/
+
+# Private data copied off the phone, and test audio: never commit
+tools/*.db
+tools/*.wav
+tools/hf_samples/
+tools/test_out.txt
+
+# Trained model weights (1+ GB; kept on Google Drive / external backup, not in git)
+final-model*/
+final-model*.zip
+*.safetensors
+*.gguf

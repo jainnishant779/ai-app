@@ -26,7 +26,8 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
         if (!isInstalled) return@withContext emptyList()
         // Quiet speech is under the segmentation model's detection level; the same gain as for recognition fixes that
         // (measured on real recordings: 1 detected speaker without it, 2 with it).
-        val pre = AudioPreprocessor(AudioPreprocessor.measureGain(wav))
+        val (diarGain, noiseFloor) = AudioPreprocessor.measure(wav)
+        val pre = AudioPreprocessor(diarGain, noiseFloor)
         val samples = WavReader(wav).use { r ->
             if (r.totalSamples > MAX_SAMPLES) return@withContext emptyList()
             FloatArray(r.totalSamples.toInt()).also { out ->

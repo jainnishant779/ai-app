@@ -65,8 +65,9 @@ class SummarizerTest {
 
     private fun longTranscript(n: Int) = Array(n) { i -> "segment$i " + "word ".repeat(20).trim() }
 
-    private suspend fun run(engine: FakeEngine, id: Long, maxChunks: Int = 36) =
-        MapReduceSummarizer(db, engine, grammar, "test", maxChunks).run(id)
+    // minWords = 0: most cases use a few words to exercise extraction; the short-recording rule has its own test.
+    private suspend fun run(engine: FakeEngine, id: Long, maxChunks: Int = 36, minWords: Int = 0) =
+        MapReduceSummarizer(db, engine, grammar, "test", maxChunks, minWords).run(id)
 
     private val goodJson = "{\"tasks\":[{\"text\":\"Send the deck\",\"due\":\"Mon\"}],\"decisions\":[\"Use vendor A\"]}"
 
@@ -176,6 +177,17 @@ class SummarizerTest {
         val c = db.conversations().get(id)!!
         assertEquals("DONE", c.status)
         assertEquals("No speech was detected", c.statusDetail)
+    }
+
+    @Test fun aFewWordsAreNotSummarized() = runBlocking {
+        val id = conversation("Hello, how are you?", "Aa rahe hain?")
+        val engine = happy()
+        run(engine, id, minWords = 25)
+        assertTrue("the model must not be asked to summarize a greeting", engine.prompts.isEmpty())
+        val c = db.conversations().get(id)!!
+        assertEquals("DONE", c.status)
+        assertEquals("Too short to summarize", c.statusDetail)
+        assertTrue(db.decisions().observe(id).first().isEmpty())
     }
 
     @Test fun veryLongRecordingsAreCappedAndSaySo() = runBlocking {
