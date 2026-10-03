@@ -18,9 +18,10 @@ class RealSettingsRepository(private val context: Context) : SettingsRepository 
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val name = MutableStateFlow(prefs.getString("user_name", "") ?: "")
     private val language = MutableStateFlow(prefs.getString("audio_language", "hinglish") ?: "hinglish")
+    private val vocabulary = MutableStateFlow(prefs.getString("custom_vocabulary", "") ?: "")
     private val model = ModelInfo(context)
 
-    override val info: Flow<SettingsInfo> = kotlinx.coroutines.flow.combine(name, language) { userName, lang ->
+    override val info: Flow<SettingsInfo> = kotlinx.coroutines.flow.combine(name, language, vocabulary) { userName, lang, vocab ->
         val sttRoot = File(context.filesDir, "models/stt")
         val currentStt = com.nishu.app.stt.SttModelSpec.select(sttRoot, lang)
         val langLabel = if (lang.equals("english", ignoreCase = true)) "English (Meetings)" else "Hinglish (Conversations)"
@@ -36,6 +37,7 @@ class RealSettingsRepository(private val context: Context) : SettingsRepository 
             storageTotalBytes = StatFs(context.filesDir.absolutePath).totalBytes,
             userName = userName,
             languageCode = lang,
+            customVocabulary = vocab,
         )
     }.flowOn(Dispatchers.IO)
 
@@ -47,6 +49,11 @@ class RealSettingsRepository(private val context: Context) : SettingsRepository 
     override suspend fun setLanguage(language: String) {
         prefs.edit().putString("audio_language", language).apply()
         this.language.value = language
+    }
+
+    override suspend fun setCustomVocabulary(vocab: String) {
+        prefs.edit().putString("custom_vocabulary", vocab).apply()
+        this.vocabulary.value = vocab
     }
 
     private fun soc(): String {

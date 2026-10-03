@@ -12,17 +12,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.FolderSpecial
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.nishu.app.DeepLinks
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -33,14 +32,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.nishu.app.DeepLinks
 import com.nishu.app.ui.bench.BenchmarkRoute
+import com.nishu.app.ui.chat.ChatRoute
 import com.nishu.app.ui.bench.DiagnosticsRoute
 import com.nishu.app.ui.components.BottomTab
 import com.nishu.app.ui.components.NishuBottomBar
+import com.nishu.app.ui.conversation.AudioDetailsRoute
 import com.nishu.app.ui.conversation.ConversationDetailRoute
 import com.nishu.app.ui.conversations.ConversationsRoute
 import com.nishu.app.ui.home.HomeRoute
 import com.nishu.app.ui.memory.MemoryRoute
+import com.nishu.app.ui.onboarding.OnboardingScreen
 import com.nishu.app.ui.processing.ProcessingRoute
 import com.nishu.app.ui.recording.RecordingRoute
 import com.nishu.app.ui.search.SearchRoute
@@ -48,9 +51,11 @@ import com.nishu.app.ui.settings.SettingsRoute
 import com.nishu.app.ui.transcript.TranscriptRoute
 
 object Routes {
+    const val ONBOARDING = "onboarding"
     const val HOME = "home"
     const val CONVERSATIONS = "conversations"
     const val CONVERSATION = "conversation/{id}"
+    const val AUDIO_DETAILS = "audio_details/{id}"
     const val RECORDING = "recording"
     const val PROCESSING = "processing/{id}"
     const val TRANSCRIPT = "transcript/{id}"
@@ -58,18 +63,22 @@ object Routes {
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val BENCHMARK = "benchmark"
+    const val CHAT = "chat"
+    const val RECORDING_CHAT = "chat/{id}?title={title}"
     const val DIAGNOSTICS = "diagnostics"
 
     fun conversation(id: Long) = "conversation/$id"
+    fun audioDetails(id: Long) = "audio_details/$id"
     fun processing(id: Long) = "processing/$id"
     fun transcript(id: Long) = "transcript/$id"
+    fun recordingChat(id: Long, title: String) = "chat/$id?title=${android.net.Uri.encode(title)}"
 }
 
 private val tabs = listOf(
     BottomTab(Routes.HOME, "Home", Icons.Rounded.Home),
-    BottomTab(Routes.CONVERSATIONS, "Conversations", Icons.Rounded.Forum),
-    BottomTab(Routes.MEMORY, "Memory", Icons.Rounded.Shield),
-    BottomTab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
+    BottomTab(Routes.CONVERSATIONS, "History", Icons.Rounded.History),
+    BottomTab(Routes.CHAT, "Chat", Icons.Rounded.AutoAwesome),
+    BottomTab(Routes.MEMORY, "Memory", Icons.Rounded.FolderSpecial),
 )
 
 private val idArg = listOf(navArgument("id") { type = NavType.LongType })
@@ -117,27 +126,66 @@ fun NishuApp() {
             modifier = Modifier.padding(padding).fillMaxSize(),
             enterTransition = enter(), exitTransition = exit(), popEnterTransition = popEnter(), popExitTransition = popExit(),
         ) {
+            composable(Routes.ONBOARDING) {
+                OnboardingScreen(
+                    onGetStarted = {
+                        nav.navigate(Routes.HOME) {
+                            popUpTo(Routes.ONBOARDING) { inclusive = true }
+                        }
+                    },
+                )
+            }
             composable(Routes.HOME) {
                 HomeRoute(
                     onStartRecording = { nav.navigate(Routes.RECORDING) { launchSingleTop = true } },
                     onOpenConversation = { nav.navigate(Routes.conversation(it)) },
                     onSeeAll = { nav.switchTab(Routes.CONVERSATIONS) },
-                    onOpenSettings = { nav.switchTab(Routes.SETTINGS) },
+                    onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onOpenChat = { nav.switchTab(Routes.CHAT) },
                 )
             }
             composable(Routes.CONVERSATIONS) {
                 ConversationsRoute(onOpen = { nav.navigate(Routes.conversation(it)) }, onSearch = { nav.navigate(Routes.SEARCH) })
             }
             composable(Routes.MEMORY) { MemoryRoute(onSearch = { nav.navigate(Routes.SEARCH) }) }
+            composable(Routes.CHAT) { ChatRoute() }
+            composable(
+                Routes.RECORDING_CHAT,
+                listOf(
+                    navArgument("id") { type = NavType.LongType },
+                    navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { e ->
+                ChatRoute(
+                    recordingId = e.arguments!!.getLong("id"),
+                    recordingTitle = e.arguments!!.getString("title")?.ifBlank { null },
+                    onBack = { nav.popBackStack() },
+                )
+            }
             composable(Routes.SETTINGS) {
-                SettingsRoute(onBenchmark = { nav.navigate(Routes.BENCHMARK) }, onDiagnostics = { nav.navigate(Routes.DIAGNOSTICS) })
+                SettingsRoute(
+                    onBenchmark = { nav.navigate(Routes.BENCHMARK) },
+                    onDiagnostics = { nav.navigate(Routes.DIAGNOSTICS) },
+                    onOnboarding = { nav.navigate(Routes.ONBOARDING) },
+                )
             }
             composable(Routes.CONVERSATION, idArg) { e ->
+                val convId = e.arguments!!.getLong("id")
                 ConversationDetailRoute(
-                    id = e.arguments!!.getLong("id"),
+                    id = convId,
                     onBack = { nav.popBackStack() },
                     onTranscript = { nav.navigate(Routes.transcript(it)) },
                     onProcessing = { nav.navigate(Routes.processing(it)) },
+                    onAudioDetails = { nav.navigate(Routes.audioDetails(convId)) },
+                    onAskAi = { id, title -> nav.navigate(Routes.recordingChat(id, title)) },
+                )
+            }
+            composable(Routes.AUDIO_DETAILS, idArg) { e ->
+                val id = e.arguments!!.getLong("id")
+                AudioDetailsRoute(
+                    id = id,
+                    onBack = { nav.popBackStack() },
+                    onPlay = { nav.navigate(Routes.conversation(id)) },
                 )
             }
             composable(Routes.TRANSCRIPT, idArg) { e ->

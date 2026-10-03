@@ -44,6 +44,9 @@ interface ConversationDao {
 
     @Query("SELECT COUNT(*) FROM conversation")
     fun countAll(): Flow<Int>
+
+    @Query("SELECT * FROM conversation ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<ConversationEntity>
 }
 
 @Dao
@@ -84,6 +87,9 @@ interface SummaryDao {
 
     @Query("SELECT * FROM summary")
     fun observeAll(): Flow<List<SummaryEntity>>
+
+    @Query("SELECT * FROM summary WHERE conversationId = :id")
+    suspend fun get(id: Long): SummaryEntity?
 }
 
 @Dao

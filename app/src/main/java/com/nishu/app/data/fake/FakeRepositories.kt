@@ -171,6 +171,9 @@ class FakeSettingsRepository(private val store: FakeStore) : SettingsRepository 
 
     override suspend fun setLanguage(language: String) {
     }
+
+    override suspend fun setCustomVocabulary(vocab: String) {
+    }
 }
 
 class FakeBenchmarkRepository : BenchmarkRepository {

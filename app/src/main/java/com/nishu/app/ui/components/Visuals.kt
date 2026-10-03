@@ -35,8 +35,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -48,62 +48,117 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nishu.app.domain.model.StepState
+import com.nishu.app.ui.theme.NishuPalette
 import com.nishu.app.ui.theme.NishuTheme
+
+/**
+ * Concentric radar circles with responsive audio waveform in center (Screen C - Recording).
+ */
+@Composable
+fun RecordingRadarWaveform(
+    levels: List<Float>,
+    level: Float,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val transition = rememberInfiniteTransition(label = "radarPulse")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart),
+        label = "phase",
+    )
+
+    Canvas(modifier = modifier) {
+        val center = center
+        val maxR = size.minDimension / 2f
+        val boost = 1f + (level.coerceIn(0f, 1f) * 0.12f)
+
+        // Draw concentric subtle rings
+        val rings = 5
+        for (i in 1..rings) {
+            val baseFrac = i.toFloat() / rings
+            val animatedFrac = if (active) (baseFrac + phase * 0.2f) % 1f else baseFrac
+            val r = maxR * animatedFrac * boost
+            val alpha = (1f - (r / maxR).coerceIn(0f, 1f)) * 0.22f
+            drawCircle(
+                color = Color.White.copy(alpha = alpha),
+                radius = r,
+                center = center,
+                style = Stroke(width = 1.5.dp.toPx()),
+            )
+        }
+
+        // Draw centered audio waveform bars
+        val barCount = 31
+        val barWidth = 3.5.dp.toPx()
+        val spacing = 3.5.dp.toPx()
+        val totalWidth = barCount * barWidth + (barCount - 1) * spacing
+        val startX = (size.width - totalWidth) / 2f
+        val maxBarH = size.height * 0.58f
+        val minBarH = 6.dp.toPx()
+
+        for (i in 0 until barCount) {
+            val distFromCenter = kotlin.math.abs(i - barCount / 2).toFloat() / (barCount / 2)
+            val bellCurve = (1f - distFromCenter * 0.65f).coerceAtLeast(0.15f)
+
+            val sampleIdx = if (levels.isNotEmpty()) {
+                (i * levels.size / barCount).coerceIn(0, levels.lastIndex)
+            } else 0
+            val rawLevel = if (levels.isNotEmpty()) levels[sampleIdx] else 0.1f
+            val dynamicLevel = if (active) (rawLevel * 0.7f + level * 0.3f).coerceIn(0.08f, 1f) else 0.08f
+
+            val h = (minBarH + (maxBarH - minBarH) * dynamicLevel * bellCurve).coerceIn(minBarH, maxBarH)
+            val x = startX + i * (barWidth + spacing)
+            val y = center.y - h / 2f
+
+            drawRoundRect(
+                color = Color.White.copy(alpha = if (active) 0.95f else 0.45f),
+                topLeft = Offset(x, y),
+                size = Size(barWidth, h),
+                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f),
+            )
+        }
+    }
+}
 
 @Composable
 fun RecordingOrb(level: Float, active: Boolean, modifier: Modifier = Modifier, size: Dp = 168.dp) {
-    val transition = rememberInfiniteTransition(label = "orb")
-    val phase by transition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Restart),
-        label = "phase",
+    RecordingRadarWaveform(
+        levels = listOf(level),
+        level = level,
+        active = active,
+        modifier = modifier.size(size),
     )
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
-    Box(
-        modifier.size(size * 1.5f).semantics { contentDescription = if (active) "Recording in progress" else "Recording paused" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            if (active) {
-                val boost = 1f + level.coerceIn(0f, 1f) * 0.08f
-                for (i in 0..2) {
-                    val t = (phase + i / 3f) % 1f
-                    val r = (this.size.minDimension / 2f) * (0.62f + 0.38f * t) * boost
-                    drawCircle(primary.copy(alpha = 0.22f * (1f - t)), radius = r, center = center)
-                }
-            }
-        }
-        Box(
-            Modifier
-                .size(size * 0.62f)
-                .alpha(if (active) 1f else 0.6f)
-                .clip(CircleShape)
-                .background(Brush.radialGradient(listOf(secondary, primary)))
-                .border(6.dp, Color.White.copy(alpha = 0.35f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.28f))
-        }
-    }
 }
 
 @Composable
 fun AudioWaveform(
     levels: List<Float>,
     modifier: Modifier = Modifier,
-    activeColor: Color = MaterialTheme.colorScheme.primary,
+    activeColor: Color = NishuPalette.Primary,
     inactiveColor: Color = MaterialTheme.colorScheme.outlineVariant,
     progress: Float? = null,
     barWidth: Dp = 3.dp,
     gap: Dp = 3.dp,
 ) {
     Canvas(modifier) {
-        if (levels.isEmpty()) return@Canvas
+        if (levels.isEmpty()) {
+            // Draw a subtle placeholder line
+            drawLine(
+                color = inactiveColor,
+                start = Offset(0f, size.height / 2f),
+                end = Offset(size.width, size.height / 2f),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round,
+            )
+            return@Canvas
+        }
         val bw = barWidth.toPx()
         val g = gap.toPx()
         val count = ((size.width + g) / (bw + g)).toInt().coerceAtLeast(1)
@@ -137,18 +192,18 @@ fun ProcessingStep(label: String, state: StepState, modifier: Modifier = Modifie
         modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.medium)
-            .background(if (state == StepState.RUNNING) scheme.primaryContainer else Color.Transparent)
+            .background(if (state == StepState.RUNNING) NishuPalette.Mint else Color.Transparent)
             .padding(horizontal = 12.dp, vertical = 12.dp)
             .semantics(mergeDescendants = true) { contentDescription = "$label, $stateText" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
             when (state) {
-                StepState.COMPLETED -> Box(Modifier.size(26.dp).clip(CircleShape).background(ext.success), contentAlignment = Alignment.Center) {
+                StepState.COMPLETED -> Box(Modifier.size(26.dp).clip(CircleShape).background(NishuPalette.Primary), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 }
-                StepState.RUNNING -> CircularProgressIndicator(strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp), color = scheme.primary)
-                StepState.PENDING -> Box(Modifier.size(24.dp).border(2.dp, scheme.outlineVariant, CircleShape))
+                StepState.RUNNING -> CircularProgressIndicator(strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp), color = NishuPalette.Primary)
+                StepState.PENDING -> Box(Modifier.size(24.dp).border(1.5.dp, scheme.outlineVariant, CircleShape))
                 StepState.FAILED -> Box(Modifier.size(26.dp).clip(CircleShape).background(scheme.error), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 }
@@ -157,7 +212,9 @@ fun ProcessingStep(label: String, state: StepState, modifier: Modifier = Modifie
         Spacer(Modifier.width(14.dp))
         Text(
             label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = if (state == StepState.RUNNING) FontWeight.SemiBold else FontWeight.Normal,
+            ),
             color = if (state == StepState.PENDING) scheme.onSurfaceVariant else scheme.onSurface,
         )
     }
@@ -171,8 +228,8 @@ fun NishuRobot(modifier: Modifier = Modifier, size: Dp = 120.dp) {
         animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
         label = "bob",
     )
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
+    val primary = NishuPalette.Primary
+    val secondary = NishuPalette.Secondary
     val dark = MaterialTheme.colorScheme.onBackground
     Canvas(modifier.size(size).graphicsLayer { translationY = bob.dp.toPx() }.semantics { contentDescription = "Nishu is working" }) {
         val w = this.size.width
@@ -204,15 +261,21 @@ fun NishuRobot(modifier: Modifier = Modifier, size: Dp = 120.dp) {
 @Composable
 fun EmptyState(icon: ImageVector, title: String, message: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
     Column(
-        modifier.fillMaxWidth().padding(32.dp),
+        modifier = modifier.fillMaxWidth().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+        Box(
+            Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(NishuPalette.Mint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = NishuPalette.Primary, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(4.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), textAlign = TextAlign.Center)
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         action?.invoke()
     }
@@ -221,7 +284,7 @@ fun EmptyState(icon: ImageVector, title: String, message: String, modifier: Modi
 @Composable
 fun LoadingState(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(modifier = Modifier.semantics { contentDescription = "Loading" })
+        CircularProgressIndicator(color = NishuPalette.Primary, modifier = Modifier.semantics { contentDescription = "Loading" })
     }
 }
 
@@ -230,6 +293,6 @@ fun ErrorState(message: String, modifier: Modifier = Modifier, onRetry: (() -> U
     Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(40.dp))
         Text(message, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-        if (onRetry != null) TextButton(onClick = onRetry) { Text("Try again") }
+        if (onRetry != null) TextButton(onClick = onRetry) { Text("Try again", color = NishuPalette.Primary) }
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
@@ -142,7 +143,8 @@ fun TranscriptScreen(
                 contentPadding = PaddingValues(horizontal = Dimens.ScreenGutter, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(state.lines, key = { it.startMs }) { line ->
+                // Index in the key: two lines can share a start time, and a duplicate key crashes the list.
+                itemsIndexed(state.lines, key = { i, l -> "$i:${l.startMs}" }) { _, line ->
                     val active = state.hasAudio && player.positionMs >= line.startMs &&
                         state.lines.firstOrNull { it.startMs > line.startMs }?.let { player.positionMs < it.startMs } != false
                     val previous = state.lines.getOrNull(state.lines.indexOf(line) - 1)
