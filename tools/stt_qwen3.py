@@ -1,4 +1,4 @@
-"""Run an excerpt through Qwen3-ASR (sherpa-onnx) with the same chunking as the app, to compare against the whisper models.
+r"""Run an excerpt through Qwen3-ASR (sherpa-onnx) with the same chunking as the app, to compare against the whisper models.
 
 Usage: .\.venv\Scripts\python.exe tools\stt_qwen3.py <model-dir> <wav> <start_s> <duration_s> <out.txt>
 <model-dir> holds encoder.int8.onnx, decoder.int8.onnx, conv_frontend.onnx and tokenizer/ (vocab.json, merges.txt, tokenizer_config.json).

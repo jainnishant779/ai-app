@@ -1,0 +1,154 @@
+[
+  {
+    "id": 1,
+    "dur": 9.0,
+    "gt": "दोस्तों bash में nested और multilevel if statement के spoken tutorial में आपका स्वागत है",
+    "app_swift": "Doston, dash mein nested aur multi level if statement ke spoken tutorial mein aapka svaagat hai.",
+    "base_hi": "2.Bash Mnested & Multilevel If Estatement Case Poker Tutorial",
+    "vad_segments": 1
+  },
+  {
+    "id": 2,
+    "dur": 3.0,
+    "gt": "इस tutorial में हम निम्न के बारे में सीखेंगे",
+    "app_swift": "Is tutorial mein ham nimnalikhit ke baare mein sikhenge.",
+    "base_hi": "in this tutorial we will learn about lemon",
+    "vad_segments": 1
+  },
+  {
+    "id": 3,
+    "dur": 2.0,
+    "gt": "nested ifelse और",
+    "app_swift": "Nested if else.",
+    "base_hi": "nested if else",
+    "vad_segments": 1
+  },
+  {
+    "id": 4,
+    "dur": 3.0,
+    "gt": "multilevel ifelse statement",
+    "app_swift": "Multilevel Fail statement",
+    "base_hi": "multi level if else statement.",
+    "vad_segments": 2
+  },
+  {
+    "id": 5,
+    "dur": 5.0,
+    "gt": "हम यह कुछ उदाहरण उपयोग करके करेंगे",
+    "app_swift": "Ham yah kuchh udaahran upyog karke karen",
+    "base_hi": "buf tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu tu",
+    "vad_segments": 1
+  },
+  {
+    "id": 6,
+    "dur": 6.0,
+    "gt": "इस tutorial के अनुसरण के लिए आपको लिनक्स operating system से परिचित होना चाहिए",
+    "app_swift": "Tutorial ke anusaar ke lie aapko Linux operating system se parichit hona chaahie.",
+    "base_hi": "Aangustra Rural & Kaili Aangustra Rural & Kaili Aangustra Rural & Kaili Aangustra Rural",
+    "vad_segments": 1
+  },
+  {
+    "id": 7,
+    "dur": 7.0,
+    "gt": "यदि नहीं तो सम्बंधित tutorials के लिए कृपया हमारी website पर जाएँ",
+    "app_swift": "Yadi nahin Sambandhit tutorials ke lie krpaya hamaari website par jaen.",
+    "base_hi": "dhiyadin nahi,to sambandet tutorial scale ek krapayah our website par jai",
+    "vad_segments": 2
+  },
+  {
+    "id": 8,
+    "dur": 3.0,
+    "gt": "इस tutorial के लिए मैं उपयोग कर रही हूँ",
+    "app_swift": "Tutorial ke lie main upyog kar rahi hoon",
+    "base_hi": "i am applying tutorial",
+    "vad_segments": 1
+  },
+  {
+    "id": 9,
+    "dur": 4.0,
+    "gt": "ubuntu लिनक्स 1204 os और",
+    "app_swift": "1 2 Linux 12.04 operating system.",
+    "base_hi": "Ubuntu Linux 12.04 Operating System",
+    "vad_segments": 1
+  },
+  {
+    "id": 10,
+    "dur": 4.0,
+    "gt": "gnu bash version 4110",
+    "app_swift": "GNU version 4.1 0.1 0.",
+    "base_hi": "GNU Bash version 4.1.10",
+    "vad_segments": 1
+  },
+  {
+    "id": 11,
+    "dur": 6.0,
+    "gt": "अभ्यास के लिए gnu bash version 4 या उससे नए की सलाह दी जाती है",
+    "app_swift": "Abhyaas ke lie JNU dash version 4 ya usse nai ki salaah di jaati hai.",
+    "base_hi": "Abhaz ke liye GNU Bash Version 4 ya usin naikhi saladhi jati hai.",
+    "vad_segments": 1
+  },
+  {
+    "id": 12,
+    "dur": 5.0,
+    "gt": "अब nested ifelse statement का flow यानी प्रवाह समझते हैं",
+    "app_swift": "Nested if else statement ka flow yaani prabha samajhate hain.",
+    "base_hi": "Now, nest it if else statement's flow, meaning Prabha samaste hai.",
+    "vad_segments": 1
+  },
+  {
+    "id": 13,
+    "dur": 7.0,
+    "gt": "यहाँ यदि condition 1 true है तो condition 2 मूल्यांकित की जाएगी",
+    "app_swift": "Yahaan yadi condition 1 true hai to condition 2. Moolaankit ki jaeg",
+    "base_hi": "yaddi condition 1 true = condition 2 moliankit",
+    "vad_segments": 2
+  },
+  {
+    "id": 14,
+    "dur": 6.0,
+    "gt": "यदि कंडीशन 2 true है तो statement 1 निष्पादित किया जाएगा",
+    "app_swift": "Yadi condition 2 true hai to statement 1 nishpaadit kiya jaega.",
+    "base_hi": "",
+    "vad_segments": 1
+  },
+  {
+    "id": 15,
+    "dur": 9.0,
+    "gt": "जिसका मतलब है केवल जब conditions 1 और 2 दोनों true हैं that statement 1 निष्पादित किया जायेगा",
+    "app_swift": "Jiska matlab hai keval jab condition 1 aur 2 donon true hain tabhi statement 1. Nishpaadit kiya ja",
+    "base_hi": "dhika madalabh hai kheval jap kanditjan 1 or 2 dhono true hai tabee statement 1 nishpadit kye hajaa hai ga.",
+    "vad_segments": 2
+  },
+  {
+    "id": 20,
+    "dur": 2.0,
+    "gt": "मैं इसे खोलूंगी",
+    "app_swift": "Main ise kholoong",
+    "base_hi": "i wil open it",
+    "vad_segments": 1
+  },
+  {
+    "id": 28,
+    "dur": 7.0,
+    "gt": "myname variable है जो यूज़र के द्वारा प्रविष्ट किया गया text जोकि यूज़र input है को संचित करता है",
+    "app_swift": "My name variable hai jo user ke dvaara pravesh kiya gaya text jo ki user input hai ko sanchit kar.",
+    "base_hi": "My name is variable, user which is used in the text, user input is co-sanchaath.",
+    "vad_segments": 1
+  },
+  {
+    "id": 52,
+    "dur": 9.0,
+    "gt": "type करें: chmod space plus x space nestedifelse sh",
+    "app_swift": "Karen c h mode space plus x space. Nested eflas dot s h.",
+    "base_hi": "Type kare CH mode + x space nested ifls.sh",
+    "vad_segments": 2
+  },
+  {
+    "id": 91,
+    "dur": 7.0,
+    "gt": "mystring एक variable है जो निष्पादन के दौरान यूज़र द्वारा input शब्द संचित करता है",
+    "app_swift": "My string ek variable hai jo nishpaadan ke dauraan. User dvaara input shabd sanchit karta hai.",
+    "base_hi": "MySring is a variable which is used for user input during the day of the day.",
+    "vad_segments": 2
+  }
+]

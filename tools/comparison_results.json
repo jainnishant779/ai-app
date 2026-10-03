@@ -1,0 +1,119 @@
+{
+  "base": {
+    "label": "Base Qwen3-0.6B",
+    "total_tools": 18,
+    "name_correct": 0,
+    "args_correct": 0,
+    "total_chat": 245,
+    "false_triggers": 0,
+    "per_tool": {
+      "calculator": {
+        "total": 12,
+        "exact": 0
+      },
+      "date_time": {
+        "total": 5,
+        "exact": 0
+      },
+      "unit_converter": {
+        "total": 1,
+        "exact": 0
+      }
+    },
+    "tool_errors": [
+      {
+        "prompt": "Mere bank account me 78500 the, maine 23400 ka loan EMI aur 12000 credit card bill bhara, ab kitna balance bacha hai?",
+        "expected_name": "calculator",
+        "expected_args": {
+          "expression": "78500 - 23400 - 12000"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Calendar dekh ke batao aaj kaun sa vaar hai.",
+        "expected_name": "date_time",
+        "expected_args": {
+          "query": "day_of_week"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Cube shape box ka side 8 cm hai, iska total volume kitna hoga?",
+        "expected_name": "calculator",
+        "expected_args": {
+          "expression": "8 ** 3"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "America me dost ne bola uska ghar 40 miles door hai, to kitne km hua?",
+        "expected_name": "unit_converter",
+        "expected_args": {
+          "value": 40.0,
+          "from_unit": "miles",
+          "to_unit": "km"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Dukan wale ne 450 ki item par 25% profit margin lagaya hai, kitna margin add hua?",
+        "expected_name": "calculator",
+        "expected_args": {
+          "expression": "450 * 0.25"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Batao bhai aaj kaun sa day of the week hai?",
+        "expected_name": "date_time",
+        "expected_args": {
+          "query": "day_of_week"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Bike me 5 litre petrol dalwaya tha aur 245 km chal gayi, bike ka mileage kitna nikal raha hai?",
+        "expected_name": "calculator",
+        "expected_args": {
+          "expression": "245 / 5"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Cheque par date daalni hai, batao aaj konsi tareekh hai.",
+        "expected_name": "date_time",
+        "expected_args": {
+          "query": "today"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "50000 rupaye par 7.5% annual rate se 3 saal ka interest kitna aayega?",
+        "expected_name": "calculator",
+        "expected_args": {
+          "expression": "(50000 * 7.5 * 3) / 100"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      },
+      {
+        "prompt": "Aaj se 3 din baad kaunsi date padegi?",
+        "expected_name": "date_time",
+        "expected_args": {
+          "query": "+3 days"
+        },
+        "got_name": "<missing>",
+        "got_args": {}
+      }
+    ],
+    "false_trigger_examples": []
+  }
+}
