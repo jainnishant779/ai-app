@@ -1,7 +1,9 @@
 import subprocess
 import sqlite3
 
-adb = r"C:\Users\ACER\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+import shutil
+
+adb = shutil.which("adb") or r"C:\Users\nishant\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 device = "ZA222ZJMQG"
 
 for fname in ["nishu.db", "nishu.db-wal", "nishu.db-shm"]:

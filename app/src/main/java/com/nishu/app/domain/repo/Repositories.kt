@@ -14,6 +14,8 @@ interface ConversationRepository {
     suspend fun setTaskDone(taskId: Long, done: Boolean)
     /** Gives a diarized speaker a name; a blank name restores the default "Speaker N". */
     suspend fun renameSpeaker(id: Long, label: String, name: String)
+    /** List of all saved biometric speaker profiles on device. */
+    fun speakerProfiles(): Flow<List<com.nishu.app.data.db.SpeakerProfileEntity>>
     suspend fun setCategory(id: Long, category: ConversationCategory)
     suspend fun rename(id: Long, title: String)
     suspend fun deleteAudio(id: Long)
@@ -21,6 +23,8 @@ interface ConversationRepository {
     suspend fun cancelProcessing(id: Long)
     /** Runs transcription and summarization again, e.g. after a failure. */
     suspend fun retryProcessing(id: Long)
+    /** Re-transcribes the recording with a specified model override. */
+    suspend fun retranscribe(id: Long, modelId: String?)
     /** Path of the recorded WAV, for the transcript player; null if the audio was deleted. */
     suspend fun audioPath(id: Long): String?
 }
@@ -52,6 +56,7 @@ interface SettingsRepository {
     suspend fun setUserName(name: String)
     suspend fun setLanguage(language: String)
     suspend fun setCustomVocabulary(vocab: String)
+    suspend fun setSttModel(modelId: String)
 }
 
 interface BenchmarkRepository {

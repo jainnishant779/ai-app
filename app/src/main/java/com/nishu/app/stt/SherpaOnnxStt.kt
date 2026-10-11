@@ -64,7 +64,7 @@ class SherpaOnnxStt(
                     threshold = 0.30f
                     minSilenceDuration = 0.45f
                     minSpeechDuration = 0.25f
-                    maxSpeechDuration = 27f // with the lead and tail padding this stays under MAX_WHISPER_SAMPLES
+                    maxSpeechDuration = if (qwen) 14f else 27f // 14s for Qwen3 prevents token exhaustion (<= 512 tokens)
                     windowSize = WINDOW
                 }
                 sampleRate = SAMPLE_RATE
@@ -78,9 +78,8 @@ class SherpaOnnxStt(
                         this.encoder = encoder
                         this.decoder = decoder
                         this.tokenizer = tokenizer
-                        // A 25 s chunk of Hindi in Devanagari needs far more than the default 128 new tokens.
                         maxTotalLen = 1024
-                        maxNewTokens = 448
+                        maxNewTokens = 512
                     }
                 } else {
                     modelConfig.whisper = OfflineWhisperModelConfig().apply {
@@ -97,7 +96,9 @@ class SherpaOnnxStt(
             })
             val pre = AudioPreprocessor(gain, noiseFloorDb)
             isFirstSegment = true
-            val batcher = SpeechBatcher(BATCH_SAMPLES)
+            val maxChunkSamples = if (qwen) 15 * SAMPLE_RATE else MAX_WHISPER_SAMPLES
+            val batchSamples = if (qwen) 14 * SAMPLE_RATE else BATCH_SAMPLES
+            val batcher = SpeechBatcher(batchSamples)
             try {
                 WavReader(wav).use { reader ->
                     require(reader.sampleRate == SAMPLE_RATE) { "expected 16 kHz audio, got ${reader.sampleRate}" }
@@ -108,11 +109,11 @@ class SherpaOnnxStt(
                         if (samples.isEmpty()) break
                         vad.acceptWaveform(if (preprocess) pre.process(samples) else samples)
                         done += samples.size
-                        drain(vad, recognizer, speakerTurns, batcher, onSegment)
+                        drain(vad, recognizer, speakerTurns, batcher, maxChunkSamples, onSegment)
                         if (reader.totalSamples > 0) onProgress(done.toFloat() / reader.totalSamples)
                     }
                     vad.flush()
-                    drain(vad, recognizer, speakerTurns, batcher, onSegment)
+                    drain(vad, recognizer, speakerTurns, batcher, maxChunkSamples, onSegment)
                     batcher.flush()?.let { recognize(recognizer, it, onSegment) }
                     onProgress(1f)
                 }
@@ -129,6 +130,7 @@ class SherpaOnnxStt(
         recognizer: OfflineRecognizer,
         turns: List<SpeakerTurn>,
         batcher: SpeechBatcher,
+        maxChunkSamples: Int,
         onSegment: suspend (Seg) -> Unit,
     ) {
         while (!vad.empty()) {
@@ -160,7 +162,7 @@ class SherpaOnnxStt(
                 val padTo = if (pieceIdx < pieces.lastIndex) minOf(speechEnd, to + CONTEXT_PAD) else segSamples.size
 
                 // Whisper reads 30 s. The padding must never push a segment over that limit and cut it mid-word.
-                for (part in SpeechChunks.split(padTo - padFrom, MAX_WHISPER_SAMPLES)) {
+                for (part in SpeechChunks.split(padTo - padFrom, maxChunkSamples)) {
                     val a = padFrom + part.first
                     val b = padFrom + part.last + 1
                     // Each part keeps its own time span, clamped to the piece (padding is not speech time).

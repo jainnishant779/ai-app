@@ -88,10 +88,11 @@ data class ModelOption(
 )
 
 val availableModels = listOf(
-    ModelOption("swift", "Swift (Hindi/Hinglish)", "~160 MB", Color(0xFF2563EB), defaultSelected = true),
-    ModelOption("whisper_small", "Whisper Small (English)", "~357 MB", Color(0xFF0284C7), defaultSelected = true),
-    ModelOption("whisper_tiny", "Whisper Tiny Hinglish", "~46 MB", Color(0xFFD97706), defaultSelected = false),
-    ModelOption("qwen3_asr", "Qwen3-ASR Noisy", "~310 MB", Color(0xFF7C3AED), defaultSelected = true),
+    ModelOption("swift", "Swift Roman Hinglish (Base)", "127 MB", Color(0xFF10B981), defaultSelected = true),
+    ModelOption("conformer_ctc", "Hinglish Conformer-CTC (NeMo)", "171 MB", Color(0xFF0284C7), defaultSelected = true),
+    ModelOption("whisper_tiny_hinglish", "Whisper Tiny Hinglish (Roman)", "46 MB", Color(0xFF2563EB), defaultSelected = true),
+    ModelOption("zero_stt", "Zero STT Hinglish (Medium)", "770 MB", Color(0xFF8B5CF6), defaultSelected = false),
+    ModelOption("whisper_small", "Whisper Small (Multilingual)", "244 MB", Color(0xFFD97706), defaultSelected = false),
 )
 
 data class BenchmarkUiState(

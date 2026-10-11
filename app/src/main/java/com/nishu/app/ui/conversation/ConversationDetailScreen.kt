@@ -3,6 +3,7 @@ package com.nishu.app.ui.conversation
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -34,10 +35,13 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -95,6 +99,11 @@ import com.nishu.app.ui.components.SegmentedPillTabs
 import com.nishu.app.ui.components.SpeakerChip
 import com.nishu.app.ui.components.TaskCard
 import com.nishu.app.ui.components.TextInputDialog
+import com.nishu.app.ui.components.AssignSpeakerDialog
+import com.nishu.app.domain.repo.SettingsRepository
+import kotlinx.coroutines.flow.map
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.CheckCircle
 import com.nishu.app.ui.components.nishuCard
 import com.nishu.app.ui.components.speakerColor
 import com.nishu.app.ui.formatClock
@@ -112,12 +121,19 @@ class ConversationDetailViewModel(
     private val id: Long,
     private val repo: ConversationRepository,
     val player: AudioPlayer,
+    settings: SettingsRepository = AppGraph.settings,
 ) : ViewModel() {
     val state: StateFlow<ConversationDetail?> = repo.detail(id)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val transcript: StateFlow<List<TranscriptLine>> = repo.transcript(id)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val speakerProfiles: StateFlow<List<com.nishu.app.data.db.SpeakerProfileEntity>> = repo.speakerProfiles()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val userName: StateFlow<String> = settings.info.map { it.userName.ifBlank { "Nishant" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "Nishant")
 
     fun setTaskDone(taskId: Long, done: Boolean) = viewModelScope.launch { repo.setTaskDone(taskId, done) }
     fun rename(title: String) = viewModelScope.launch { repo.rename(id, title) }
@@ -126,6 +142,7 @@ class ConversationDetailViewModel(
     fun deleteAudio() = viewModelScope.launch { repo.deleteAudio(id) }
     fun delete(onDone: () -> Unit) = viewModelScope.launch { repo.delete(id); onDone() }
     fun retry(onStarted: () -> Unit) = viewModelScope.launch { repo.retryProcessing(id); onStarted() }
+    fun retranscribe(modelId: String?) = viewModelScope.launch { repo.retranscribe(id, modelId) }
 
     override fun onCleared() {
         player.release()
@@ -149,6 +166,8 @@ fun ConversationDetailRoute(
     )
     val detail by vm.state.collectAsStateWithLifecycle()
     val transcript by vm.transcript.collectAsStateWithLifecycle()
+    val speakerProfiles by vm.speakerProfiles.collectAsStateWithLifecycle()
+    val userName by vm.userName.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
     val envelope by vm.player.envelope.collectAsStateWithLifecycle()
 
@@ -161,6 +180,8 @@ fun ConversationDetailRoute(
         transcript = transcript,
         playerState = playerState,
         envelope = envelope,
+        speakerProfiles = speakerProfiles,
+        userName = userName,
         onBack = onBack,
         onPlayPause = { if (playerState.isPlaying) vm.player.pause() else vm.player.play() },
         onSeek = vm.player::seekTo,
@@ -172,6 +193,7 @@ fun ConversationDetailRoute(
         onDeleteAudio = vm::deleteAudio,
         onDelete = { vm.delete(onBack) },
         onRetry = { vm.retry { onProcessing(id) } },
+        onRetranscribe = vm::retranscribe,
         onAudioDetails = onAudioDetails,
         onAskAi = { onAskAi(id, detail?.conversation?.title.orEmpty()) },
     )
@@ -185,6 +207,8 @@ fun ConversationDetailScreen(
     transcript: List<TranscriptLine>,
     playerState: PlayerState,
     envelope: List<Float>,
+    speakerProfiles: List<com.nishu.app.data.db.SpeakerProfileEntity> = emptyList(),
+    userName: String = "Nishant",
     onBack: () -> Unit,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -196,6 +220,7 @@ fun ConversationDetailScreen(
     onDeleteAudio: () -> Unit,
     onDelete: () -> Unit,
     onRetry: () -> Unit = {},
+    onRetranscribe: (String?) -> Unit = {},
     onAudioDetails: () -> Unit = {},
     onAskAi: () -> Unit = {},
 ) {
@@ -207,6 +232,7 @@ fun ConversationDetailScreen(
     var renameSpeakerTarget by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmDeleteAudio by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
 
@@ -223,6 +249,10 @@ fun ConversationDetailScreen(
                     }
                     OverflowMenu(
                         actions = buildList {
+                            add(MenuAction("Assign speakers") { selectedTab = 3 })
+                            if (detail?.hasAudio == true) {
+                                add(MenuAction("Change transcript model") { showModelDialog = true })
+                            }
                             add(MenuAction("Audio details") { onAudioDetails() })
                             add(MenuAction("Rename") { renaming = true })
                             add(MenuAction("Change category") { categorizing = true })
@@ -283,26 +313,155 @@ fun ConversationDetailScreen(
                             transcript.filter { it.text.contains(searchQuery.trim(), ignoreCase = true) }
                         }
 
-                        if (filteredLines.isEmpty()) {
+                        if (detail.hasAudio) {
                             item {
-                                Text(
-                                    text = if (detail.conversation.status == ConversationStatus.RECORDED) {
-                                        "Transcribing on-device... Notes will appear shortly."
-                                    } else {
-                                        "No transcript segments available."
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(vertical = 16.dp),
-                                )
+                                Surface(
+                                    onClick = { showModelDialog = true },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Tune,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Column {
+                                                Text(
+                                                    "Speech Model",
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                )
+                                                Text(
+                                                    "Active: ${detail.conversation.sttModelLabel}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
+                                        }
+                                        Surface(
+                                            onClick = { showModelDialog = true },
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                        ) {
+                                            Text(
+                                                "Change Model",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        val isProcessing = detail.conversation.status == ConversationStatus.RECORDED ||
+                            detail.conversation.status == ConversationStatus.TRANSCRIBING ||
+                            detail.conversation.status == ConversationStatus.SUMMARIZING
+
+                        if (isProcessing) {
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(32.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            strokeWidth = 3.dp,
+                                        )
+                                        Text(
+                                            text = if (detail.conversation.status == ConversationStatus.SUMMARIZING) {
+                                                "Summarizing with Local LLM..."
+                                            } else {
+                                                "Transcribing with ${detail.conversation.sttModelLabel}..."
+                                            },
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            text = "Running on-device Silero VAD, 3D-Speaker diarization, and speech decoding. Notes will appear shortly.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (filteredLines.isEmpty()) {
+                            item {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(
+                                        text = "No speech detected in this recording.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (detail.hasAudio) {
+                                        NishuButton(
+                                            text = "Re-transcribe with Another Model",
+                                            onClick = { showModelDialog = true },
+                                            modifier = Modifier.padding(top = 4.dp),
+                                        )
+                                    }
+                                }
                             }
                         } else {
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.RecordVoiceOver,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(15.dp),
+                                        )
+                                        Text(
+                                            "Tap speaker tag [S1] to assign name & enroll voiceprint",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
                             // Two lines can start at the same millisecond; a key of startMs alone crashed the screen (duplicate key).
                             itemsIndexed(filteredLines, key = { i, l -> "$i:${l.startMs}" }) { index, line ->
                                 TranscriptSegmentTimelineItem(
                                     line = line,
                                     speakerIndex = index % 4,
                                     onClick = { onSeek(line.startMs) },
+                                    onSpeakerClick = { label -> renameSpeakerTarget = label },
                                 )
                             }
                         }
@@ -378,37 +537,163 @@ fun ConversationDetailScreen(
                     // TAB 3: SPEAKERS
                     if (selectedTab == 3) {
                         item {
-                            SectionHeader(title = "Identified Speakers")
+                            SectionHeader(title = "Speakers in this Conversation")
                         }
-                        val speakers = transcript.mapNotNull { it.speaker }.distinctBy { it.label }
-                        if (speakers.isEmpty()) {
-                            item {
-                                Text(
-                                    "Single speaker conversation or diarization pending.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        } else {
-                            items(speakers) { spk ->
+                        item {
+                            Text(
+                                "Assign names to speakers below. Nishu AI learns their voiceprints using on-device CAM++ biometrics so they are recognized automatically in future meetings and voice notes.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
+
+                        val rawSpeakers = transcript.mapNotNull { it.speaker }.distinctBy { it.label }
+                        val speakers = if (rawSpeakers.isNotEmpty()) rawSpeakers else listOf(com.nishu.app.domain.model.SpeakerRef("S1", "Speaker 1"))
+
+                        items(speakers) { spk ->
+                            val turnCount = transcript.count { (it.speaker?.label ?: "S1") == spk.label }
+                            val isNamed = spk.name != "Speaker 1" && spk.name != "Speaker 2" && !spk.name.startsWith("Speaker ")
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp)),
+                                shape = RoundedCornerShape(18.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, if (isNamed) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant),
+                                tonalElevation = 1.dp,
+                            ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .nishuCard()
-                                        .clickable { renameSpeakerTarget = spk.label }
-                                        .padding(14.dp),
+                                        .padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 ) {
-                                    SpeakerChip(spk.name, spk.index)
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        spk.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    IconButton(onClick = { renameSpeakerTarget = spk.label }) {
-                                        Icon(Icons.Rounded.Edit, contentDescription = "Rename speaker", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    // Speaker Avatar
+                                    Box(
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(CircleShape)
+                                            .background(speakerColor(spk.index).copy(alpha = 0.18f))
+                                            .border(1.5.dp, speakerColor(spk.index), CircleShape),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = spk.label,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = speakerColor(spk.index),
+                                        )
                                     }
+
+                                    // Speaker Info
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = spk.name,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = "$turnCount spoken segment${if (turnCount > 1) "s" else ""}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        if (isNamed) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                Icon(
+                                                    Icons.Rounded.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF1B8755),
+                                                    modifier = Modifier.size(13.dp),
+                                                )
+                                                Text(
+                                                    "Voice enrolled • Auto-recognized",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                                    color = Color(0xFF1B8755),
+                                                )
+                                            }
+                                        } else {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                Icon(
+                                                    Icons.Rounded.RecordVoiceOver,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(13.dp),
+                                                )
+                                                Text(
+                                                    "Voice ready • Tap Assign",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Action Button
+                                    Surface(
+                                        onClick = { renameSpeakerTarget = spk.label },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isNamed) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Edit,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = if (isNamed) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
+                                            )
+                                            Text(
+                                                text = if (isNamed) "Rename" else "Assign",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = if (isNamed) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Explanatory card
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        Text(
+                                            "How On-Device Voice Memory Works",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                    Text(
+                                        "• 3D-Speaker CAM++ creates a 512-dim voiceprint from spoken speech.\n" +
+                                        "• When you assign a name, Nishu AI saves the voice profile locally.\n" +
+                                        "• In future recordings, speakers are matched and tagged automatically.\n" +
+                                        "• Completely private: 0 bytes of audio or voice data leave your phone.",
+                                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                         }
@@ -536,11 +821,19 @@ fun ConversationDetailScreen(
     }
 
     renameSpeakerTarget?.let { label ->
-        val current = transcript.firstOrNull { it.speaker?.label == label }?.speaker?.name ?: label
-        TextInputDialog(
-            title = "Rename $label",
-            initial = current,
-            onConfirm = { onRenameSpeaker(label, it); renameSpeakerTarget = null },
+        val current = transcript.firstOrNull { it.speaker?.label == label }?.speaker?.name
+            ?: if (label == "S1") "Speaker 1" else label
+        val initialInput = if (current.startsWith("Speaker ") || current == "S1") "" else current
+        AssignSpeakerDialog(
+            speakerLabel = label,
+            currentName = initialInput,
+            defaultUserName = userName,
+            savedProfiles = speakerProfiles,
+            onConfirm = { name ->
+                onRenameSpeaker(label, name)
+                Toast.makeText(context, if (name.isNotBlank()) "Assigned as '$name'. Voice remembered!" else "Reset speaker name", Toast.LENGTH_SHORT).show()
+                renameSpeakerTarget = null
+            },
             onDismiss = { renameSpeakerTarget = null },
         )
     }
@@ -564,6 +857,148 @@ fun ConversationDetailScreen(
             onDismiss = { confirmDeleteAudio = false },
         )
     }
+
+    if (showModelDialog && detail != null) {
+        ChangeTranscriptModelDialog(
+            currentModelId = detail.conversation.sttModelId,
+            onDismiss = { showModelDialog = false },
+            onSelectModel = { modelId ->
+                onRetranscribe(modelId)
+                val label = when {
+                    modelId.contains("swift", ignoreCase = true) -> "Swift (Hinglish Base)"
+                    modelId.contains("small", ignoreCase = true) -> "Whisper Small (High Accuracy)"
+                    modelId.contains("qwen", ignoreCase = true) -> "Qwen3-ASR (Bilingual)"
+                    else -> "Auto"
+                }
+                Toast.makeText(context, "Re-transcribing with $label...", Toast.LENGTH_SHORT).show()
+            },
+        )
+    }
+}
+
+@Composable
+private fun ChangeTranscriptModelDialog(
+    currentModelId: String?,
+    onDismiss: () -> Unit,
+    onSelectModel: (String) -> Unit,
+) {
+    val models = listOf(
+        Triple(
+            "hinglish-swift-int8",
+            "Swift (Hinglish Base - 72M) ★ Fast Roman",
+            "Fastest inference. Directly writes Roman Hinglish text. Best for everyday voice notes.",
+        ),
+        Triple(
+            "whisper-small-en-int8",
+            "Whisper Small (High Accuracy - 244M) 🔥 Higher Accuracy",
+            "3.4x larger parameters. Highest recognition accuracy for mixed English/Hindi speech, accents, and noisy environments.",
+        ),
+        Triple(
+            "qwen3-asr-hinglish-int8",
+            "Qwen3-ASR Hinglish (0.6B) 🚀 SOTA Bilingual",
+            "600M parameters. Deep linguistic comprehension across diverse Indian accents.",
+        ),
+        Triple(
+            "auto",
+            "Auto Selection",
+            "Automatically selects the optimal installed model based on hardware and language.",
+        ),
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    "Change Transcript Model",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Tap any model below to immediately re-transcribe this recording on-device. Notes, speaker turns, and summaries will be regenerated from the original audio.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    models.forEach { (id, title, desc) ->
+                        val isSelected = when (id) {
+                            "auto" -> currentModelId == "auto"
+                            "hinglish-swift-int8" -> currentModelId == null || currentModelId.contains("swift", ignoreCase = true)
+                            "qwen3-asr-hinglish-int8" -> currentModelId?.contains("qwen", ignoreCase = true) == true
+                            "whisper-small-en-int8" -> currentModelId?.contains("small", ignoreCase = true) == true
+                            else -> currentModelId == id
+                        }
+                        Surface(
+                            onClick = {
+                                onSelectModel(id)
+                                onDismiss()
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) NishuPalette.PrimaryLight else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                if (isSelected) 1.5.dp else 1.dp,
+                                if (isSelected) NishuPalette.Primary else MaterialTheme.colorScheme.outlineVariant,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = {
+                                        onSelectModel(id)
+                                        onDismiss()
+                                    },
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        title,
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        ),
+                                        color = if (isSelected) NishuPalette.Primary else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        desc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Text(
+                "Cancel",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }
 
 /** Audio Player card matching Screen D in the visual reference */
@@ -664,6 +1099,7 @@ private fun TranscriptSegmentTimelineItem(
     line: TranscriptLine,
     speakerIndex: Int,
     onClick: () -> Unit,
+    onSpeakerClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val dotColor = speakerColor(speakerIndex)
@@ -707,6 +1143,35 @@ private fun TranscriptSegmentTimelineItem(
 
         // Text content
         Column(Modifier.weight(1f)) {
+            val spkName = line.speaker?.name ?: "Speaker 1"
+            val spkIndex = line.speaker?.index ?: speakerIndex
+            val spkLabel = line.speaker?.label ?: "S1"
+            val isCustomNamed = line.speaker?.name != null && !spkName.startsWith("Speaker ") && spkName != "S1"
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onSpeakerClick(spkLabel) }
+                    .padding(vertical = 2.dp, horizontal = 4.dp),
+            ) {
+                SpeakerChip(spkName, spkIndex)
+                Icon(
+                    Icons.Rounded.Edit,
+                    contentDescription = "Assign name to $spkLabel",
+                    modifier = Modifier.size(13.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                if (!isCustomNamed) {
+                    Text(
+                        text = "Assign",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = line.text,
                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),

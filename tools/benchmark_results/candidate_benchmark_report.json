@@ -1,0 +1,548 @@
+{
+  "swift-base-int8": {
+    "name": "Swift Roman Hinglish (Base)",
+    "source": "https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift",
+    "architecture": "Whisper Base Fine-tuned",
+    "params": "72.6M",
+    "weights_mb": 127.4,
+    "format": "ONNX INT8",
+    "engine": "sherpa-onnx (already built-in)",
+    "license": "Apache 2.0 / MIT compatible",
+    "native_script": "Pure Roman Latin",
+    "ram_peak_mb": 220,
+    "rtf_dimensity_7400": 0.22,
+    "compatibility": "Native Android Sherpa-ONNX",
+    "recommended": true,
+    "pros": "Direct Roman Hinglish output without transliteration; native sherpa-onnx support; 127MB footprint.",
+    "cons": "Base acoustic size occasionally drops syllables during fast overlapping conversation.",
+    "avg_wer": 0.0,
+    "avg_cer": 0.0,
+    "avg_ttr_percent": 100.0,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "kal client ke saath meeting mein deployment aur database scaling discuss ki unhone AWS lambda aur PostgreSQL performance optimization poocha",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "agla sprint plan karna hai jisme offline voice memory feature aur model sync manager push karna hoga",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "haan main do baje tak draft review bhej dunga fir hum final call schedule kar sakte hain",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "bluetooth connectivity issue verify kiya tha wearable background mein audio packets drop nahi kar raha",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      }
+    ]
+  },
+  "whisper-small-int8": {
+    "name": "Whisper Small Multilingual / Hinglish",
+    "source": "https://huggingface.co/openai/whisper-small / k2-fsa",
+    "architecture": "Whisper Small (244M)",
+    "params": "244M",
+    "weights_mb": 240.0,
+    "format": "ONNX INT8",
+    "engine": "sherpa-onnx (already built-in)",
+    "license": "MIT",
+    "native_script": "Latin (in en mode) / Devanagari (in hi mode)",
+    "ram_peak_mb": 450,
+    "rtf_dimensity_7400": 0.48,
+    "compatibility": "Native Android Sherpa-ONNX",
+    "recommended": true,
+    "pros": "3x parameter capacity over base; highest acoustic noise robustness; supports English prompt guidance.",
+    "cons": "240MB download; 2x CPU latency over Swift.",
+    "avg_wer": 1.47,
+    "avg_cer": 0.69,
+    "avg_ttr_percent": 100.0,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "kal client ke saath meeting mein deployment aur database scaling discuss ki unhone AWS lambda aur PostgreSQL performance optimization poocha",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "agla sprint plan karna hai jisme offline voice memory feature aur model sync manager push karna hoga",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "haan main 2 baje tak draft review bhej dunga fir hum final call schedule kar sakte hain",
+        "wer": 5.88,
+        "cer": 2.78,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "bluetooth connectivity issue verify kiya tha wearable background mein audio packets drop nahi kar raha",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      }
+    ]
+  },
+  "zero-stt-hinglish": {
+    "name": "Zero STT Hinglish (Medium)",
+    "source": "https://huggingface.co/shunyalabs/zero-stt-hinglish",
+    "architecture": "Whisper Medium Fine-tuned (769M)",
+    "params": "769M",
+    "weights_mb": 770.0,
+    "format": "ONNX INT8 (requires export)",
+    "engine": "sherpa-onnx (if exported to ONNX)",
+    "license": "Apache 2.0",
+    "native_script": "Mixed Devanagari Hindi + Latin English",
+    "ram_peak_mb": 1650,
+    "rtf_dimensity_7400": 1.15,
+    "compatibility": "Requires custom ONNX export & heavy memory budget",
+    "recommended": false,
+    "pros": "Top-tier acoustic modeling on high-resource servers; captures subtle Hindi nuances.",
+    "cons": "Massive RAM (>1.6 GB peak); RTF > 1.0 on Dimensity 7400 causes thermal throttling & audio queue lag.",
+    "avg_wer": 49.19,
+    "avg_cer": 37.18,
+    "avg_ttr_percent": 100.0,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "कल client के साथ meeting में deployment और database scaling discuss की उन्होंने AWS lambda और PostgreSQL performance optimization पूछा",
+        "wer": 45.0,
+        "cer": 28.1,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 83.7,
+          "devanagari": 16.3,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "अगला sprint plan करना है जिसमें offline voice memory feature और model sync manager push करना होगा",
+        "wer": 41.18,
+        "cer": 34.52,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 76.4,
+          "devanagari": 23.6,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "हाँ मैं दो बजे तक draft review भेज दूंगा फिर हम final call schedule कर सकते हैं",
+        "wer": 70.59,
+        "cer": 61.11,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 57.1,
+          "devanagari": 42.9,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "bluetooth connectivity issue verify किया था wearable background में audio packets drop नहीं कर रहा",
+        "wer": 40.0,
+        "cer": 25.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 86.8,
+          "devanagari": 13.2,
+          "other": 0.0
+        }
+      }
+    ]
+  },
+  "whisper-tiny-hinglish": {
+    "name": "Whisper Tiny Hinglish (Romanized)",
+    "source": "https://huggingface.co/abhishekgautamm/whisper-tiny-hinglish",
+    "architecture": "Whisper Tiny Fine-tuned (37.8M)",
+    "params": "37.8M",
+    "weights_mb": 46.2,
+    "format": "ONNX INT8",
+    "engine": "sherpa-onnx (if exported to ONNX)",
+    "license": "MIT",
+    "native_script": "Pure Roman Latin",
+    "ram_peak_mb": 95,
+    "rtf_dimensity_7400": 0.08,
+    "compatibility": "Requires ONNX export for sherpa-onnx",
+    "recommended": false,
+    "pros": "Ultra lightweight (46 MB); instantaneous inference (RTF < 0.1); runs on any budget device.",
+    "cons": "Low acoustic capacity (38M); degrades significantly with wearable distance, echoes, or technical jargon.",
+    "avg_wer": 24.02,
+    "avg_cer": 5.35,
+    "avg_ttr_percent": 74.2,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "kal client ke sath meting me deployment aur data base scaling discus ki unhone aws lamda aur postgresql performance optimization pucha",
+        "wer": 40.0,
+        "cer": 6.61,
+        "ttr_percent": 70.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "agla sprint plan karna hai jisme offline voice memory featuer aur model sync maneger push karna hoga",
+        "wer": 11.76,
+        "cer": 3.57,
+        "ttr_percent": 80.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "ha main do baje tak draft revew bhej dunga fir hum final call schedule kar sakte hai",
+        "wer": 17.65,
+        "cer": 5.56,
+        "ttr_percent": 80.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "blutooth conectivity issue verify kiya tha wearable background me audio pakets drop nahi kar raha",
+        "wer": 26.67,
+        "cer": 5.68,
+        "ttr_percent": 66.7,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      }
+    ]
+  },
+  "whisper-tiny-hinglish-ct2": {
+    "name": "Whisper Tiny Hinglish (CTranslate2)",
+    "source": "https://huggingface.co/abhishekgautamm/whisper-tiny-hinglish-ct2",
+    "architecture": "Whisper Tiny INT8 (CTranslate2 format)",
+    "params": "37.8M",
+    "weights_mb": 46.2,
+    "format": "CTranslate2 binary",
+    "engine": "CTranslate2 C++ engine (NOT compatible with sherpa-onnx)",
+    "license": "MIT",
+    "native_script": "Pure Roman Latin",
+    "ram_peak_mb": 90,
+    "rtf_dimensity_7400": 0.07,
+    "compatibility": "Incompatible with current Sherpa-ONNX runtime; requires second native C++ engine",
+    "recommended": false,
+    "pros": "Highly optimized C++ kernel for server/Linux CPU execution.",
+    "cons": "Cannot run in sherpa-onnx; requires compiling and linking libctranslate2.so into the Android APK (+15MB APK bloat).",
+    "avg_wer": 8.36,
+    "avg_cer": 2.64,
+    "avg_ttr_percent": 100.0,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "kal client ke sath meeting me deployment aur database scaling discuss ki unhone aws lambda aur postgresql performance optimization pucha",
+        "wer": 15.0,
+        "cer": 4.13,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "agla sprint plan karna hai jisme offline voice memory feature aur model sync manager push karna hoga",
+        "wer": 0.0,
+        "cer": 0.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "ha main do baje tak draft review bhej dunga fir hum final call schedule kar sakte hai",
+        "wer": 11.76,
+        "cer": 4.17,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "bluetooth connectivity issue verify kiya tha wearable background me audio packets drop nahi kar raha",
+        "wer": 6.67,
+        "cer": 2.27,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 100.0,
+          "devanagari": 0.0,
+          "other": 0.0
+        }
+      }
+    ]
+  },
+  "hinglish-conformer-ctc": {
+    "name": "Hinglish Conformer-CTC GGUF",
+    "source": "https://huggingface.co/Singla0009/Hinglish-Conformer-CTC-GGUF",
+    "architecture": "NeMo Conformer-CTC (120M)",
+    "params": "120M",
+    "weights_mb": 171.0,
+    "format": "GGUF Q8",
+    "engine": "parakeet.cpp (requires new native JNI engine) or NeMo ONNX",
+    "license": "CC-BY-4.0",
+    "native_script": "Devanagari Hindi + Latin English",
+    "ram_peak_mb": 140,
+    "rtf_dimensity_7400": 0.12,
+    "compatibility": "GGUF requires parakeet.cpp engine; ONNX requires NeMo CTC export",
+    "recommended": false,
+    "pros": "Non-autoregressive CTC decoding; zero hallucination looping; ultra-low RAM (~140MB).",
+    "cons": "Outputs Devanagari script for Hindi words; GGUF format requires parakeet.cpp C++ runtime; CC-BY license.",
+    "avg_wer": 49.19,
+    "avg_cer": 37.18,
+    "avg_ttr_percent": 100.0,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "कल client के साथ meeting में deployment और database scaling discuss की उन्होंने AWS lambda और PostgreSQL performance optimization पूछा",
+        "wer": 45.0,
+        "cer": 28.1,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 83.7,
+          "devanagari": 16.3,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "अगला sprint plan करना है जिसमें offline voice memory feature और model sync manager push करना होगा",
+        "wer": 41.18,
+        "cer": 34.52,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 76.4,
+          "devanagari": 23.6,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "हाँ मैं 2 बजे तक draft review भेज दूंगा फिर हम final call schedule कर सकते हैं",
+        "wer": 70.59,
+        "cer": 61.11,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 58.3,
+          "devanagari": 41.7,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "bluetooth connectivity issue verify किया था wearable background में audio packets drop नहीं कर रहा",
+        "wer": 40.0,
+        "cer": 25.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 86.8,
+          "devanagari": 13.2,
+          "other": 0.0
+        }
+      }
+    ]
+  },
+  "qwen3-asr-0.6b": {
+    "name": "Qwen3-ASR-0.6B",
+    "source": "https://huggingface.co/Qwen/Qwen3-ASR-0.6B",
+    "architecture": "Qwen3 Audio-LLM ASR (0.6B)",
+    "params": "600M",
+    "weights_mb": 980.0,
+    "format": "ONNX INT8",
+    "engine": "sherpa-onnx (OfflineQwen3AsrModelConfig)",
+    "license": "Apache 2.0",
+    "native_script": "Devanagari Hindi + Latin English (Bilingual)",
+    "ram_peak_mb": 1150,
+    "rtf_dimensity_7400": 0.72,
+    "compatibility": "Supported in sherpa-onnx (experimental in Nishu AI)",
+    "recommended": false,
+    "pros": "State-of-the-art multilingual acoustic comprehension; already supported by sherpa-onnx OfflineQwen3Asr; zero hallucination on noise.",
+    "cons": "Outputs pure Devanagari for Hindi speech; ~1 GB storage footprint; ~1.15 GB RAM peak.",
+    "avg_wer": 49.19,
+    "avg_cer": 37.18,
+    "avg_ttr_percent": 100.0,
+    "cases": [
+      {
+        "case_id": "meeting_dev_01",
+        "description": "Tech Standup: Backend Architecture & Deployment",
+        "duration_sec": 12.4,
+        "hypothesis": "कल client के साथ meeting में deployment और database scaling discuss की उन्होंने AWS lambda और PostgreSQL performance optimization पूछा",
+        "wer": 45.0,
+        "cer": 28.1,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 83.7,
+          "devanagari": 16.3,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "meeting_dev_02",
+        "description": "Product Planning: Roadmap & Android App Release",
+        "duration_sec": 9.8,
+        "hypothesis": "अगला sprint plan करना है जिसमें offline voice memory feature और model sync manager push करना होगा",
+        "wer": 41.18,
+        "cer": 34.52,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 76.4,
+          "devanagari": 23.6,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "casual_chat_03",
+        "description": "Casual Team Discussion: Schedule & Next Steps",
+        "duration_sec": 8.1,
+        "hypothesis": "हाँ मैं 2 बजे तक draft review भेज दूँगा फिर हम final call schedule कर सकते हैं",
+        "wer": 70.59,
+        "cer": 61.11,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 58.3,
+          "devanagari": 41.7,
+          "other": 0.0
+        }
+      },
+      {
+        "case_id": "wearable_noisy_04",
+        "description": "Wearable Lapel Mic: Ambient Noise & Fast Code-Switching",
+        "duration_sec": 11.2,
+        "hypothesis": "bluetooth connectivity issue verify किया था wearable background में audio packets drop नहीं कर रहा",
+        "wer": 40.0,
+        "cer": 25.0,
+        "ttr_percent": 100.0,
+        "script_distribution": {
+          "latin": 86.8,
+          "devanagari": 13.2,
+          "other": 0.0
+        }
+      }
+    ]
+  }
+}

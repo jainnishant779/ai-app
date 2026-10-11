@@ -38,6 +38,8 @@ object SttText {
     private val sudoRegex = Regex("""(?i)\b(s\s*u\s*d\s*o|soo\s*doo)\b""")
     private val gitCommitRegex = Regex("""(?i)\bgit\s+(kamit|kameet)\b""")
     private val gitPushRegex = Regex("""(?i)\bgit\s+(poosh|pus)\b""")
+    private val gitPullRegex = Regex("""(?i)\bgit\s+(fool|phool|pool)\b""")
+    private val pullRequestRegex = Regex("""(?i)\b(fool|phool)\s+request\b""")
     private val pipInstallRegex = Regex("""(?i)\bp\s*i\s*p\s+install\b""")
     private val npmInstallRegex = Regex("""(?i)\bn\s*p\s*m\s+install\b""")
 
@@ -117,6 +119,8 @@ object SttText {
         res = sudoRegex.replace(res, "sudo")
         res = gitCommitRegex.replace(res, "git commit")
         res = gitPushRegex.replace(res, "git push")
+        res = gitPullRegex.replace(res, "git pull")
+        res = pullRequestRegex.replace(res, "pull request")
         res = pipInstallRegex.replace(res, "pip install")
         res = npmInstallRegex.replace(res, "npm install")
         for ((pattern, ext) in dotExtensionRegexes) {

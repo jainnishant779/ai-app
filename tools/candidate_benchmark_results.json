@@ -1,0 +1,54 @@
+[
+  {
+    "id": "hinglish-swift-int8",
+    "name": "Swift Roman Hinglish (Base)",
+    "source": "Oriserve/Whisper-Hindi2Hinglish-Swift",
+    "params": "72.6M",
+    "weights_size_mb": 127.4,
+    "format": "ONNX INT8 (sherpa-onnx)",
+    "native_script": "Pure Roman Latin",
+    "ram_peak_mb": 220,
+    "edge_ready": true,
+    "pros": "Direct Roman Hinglish, high edge speed, 2x acoustic capacity over tiny",
+    "cons": "Slightly larger than tiny (127MB vs 46MB)"
+  },
+  {
+    "id": "hinglish-conformer-ctc",
+    "name": "Hinglish Conformer-CTC (Large)",
+    "source": "Singla0009/Hinglish-Conformer-CTC-GGUF / parthiv11",
+    "params": "120M",
+    "weights_size_mb": 171.0,
+    "format": "GGUF (parakeet.cpp) / NeMo ONNX (sherpa-onnx)",
+    "native_script": "Devanagari (Hindi) + Latin (English)",
+    "ram_peak_mb": 140,
+    "edge_ready": false,
+    "pros": "Ultra fast non-autoregressive CTC decoding, low RAM (~140MB)",
+    "cons": "Outputs Devanagari script; needs transliteration or GGUF C++ engine added to APK"
+  },
+  {
+    "id": "whisper-tiny-hinglish",
+    "name": "Whisper Tiny Hinglish (Romanized)",
+    "source": "abhishekgautamm/whisper-tiny-hinglish",
+    "params": "37.8M",
+    "weights_size_mb": 46.2,
+    "format": "ONNX INT8 (sherpa-onnx) / CTranslate2",
+    "native_script": "Pure Roman Latin",
+    "ram_peak_mb": 95,
+    "edge_ready": true,
+    "pros": "Ultra lightweight (46MB), instant CPU inference (RTF < 0.1), direct Roman output",
+    "cons": "Low acoustic capacity (38M); struggles with wearable lapel noise and overlapping talk"
+  },
+  {
+    "id": "zero-stt-hinglish",
+    "name": "Zero STT Hinglish (Medium)",
+    "source": "shunyalabs/zero-stt-hinglish",
+    "params": "769M",
+    "weights_size_mb": 770.0,
+    "format": "Whisper Medium ONNX INT8",
+    "native_script": "Mixed Devanagari + Latin English",
+    "ram_peak_mb": 1650,
+    "edge_ready": false,
+    "pros": "High accuracy on clean audio code-switching",
+    "cons": "Massive RAM (>1.5 GB), slow on phone CPU (RTF ~1.0x), thermal throttling, mixed script"
+  }
+]

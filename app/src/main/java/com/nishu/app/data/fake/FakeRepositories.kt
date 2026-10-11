@@ -47,6 +47,7 @@ class FakeConversationRepository(private val store: FakeStore) : ConversationRep
     }
 
     override suspend fun renameSpeaker(id: Long, label: String, name: String) = Unit
+    override fun speakerProfiles() = kotlinx.coroutines.flow.flowOf(emptyList<com.nishu.app.data.db.SpeakerProfileEntity>())
     override suspend fun setCategory(id: Long, category: ConversationCategory) = update(id) { it.copy(category = category) }
     override suspend fun rename(id: Long, title: String) = update(id) { it.copy(title = title) }
 
@@ -60,6 +61,7 @@ class FakeConversationRepository(private val store: FakeStore) : ConversationRep
 
     override suspend fun cancelProcessing(id: Long) = delete(id)
     override suspend fun retryProcessing(id: Long) = Unit
+    override suspend fun retranscribe(id: Long, modelId: String?) = Unit
     override suspend fun audioPath(id: Long): String? = null
 
     private fun update(id: Long, f: (ConversationUiModel) -> ConversationUiModel) {
@@ -173,6 +175,9 @@ class FakeSettingsRepository(private val store: FakeStore) : SettingsRepository 
     }
 
     override suspend fun setCustomVocabulary(vocab: String) {
+    }
+
+    override suspend fun setSttModel(modelId: String) {
     }
 }
 

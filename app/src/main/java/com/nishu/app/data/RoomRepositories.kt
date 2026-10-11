@@ -5,6 +5,7 @@ import com.nishu.app.data.db.DecisionEntity
 import com.nishu.app.data.db.MemoryFactEntity
 import com.nishu.app.data.db.NishuDatabase
 import com.nishu.app.data.db.SpeakerNameEntity
+import com.nishu.app.data.db.SpeakerProfileEntity
 import com.nishu.app.data.db.SummaryEntity
 import com.nishu.app.data.db.TaskEntity
 import com.nishu.app.domain.model.*
@@ -33,12 +34,14 @@ fun ConversationEntity.toUi(summary: SummaryEntity?, nowMs: Long = System.curren
     durationLabel = TimeLabels.duration(durationMs),
     preview = summary?.bulletsText?.lineSequence()?.firstOrNull { it.isNotBlank() }.orEmpty(),
     status = enumOr(status, ConversationStatus.FAILED),
+    sttModelId = sttModelId,
 )
 
 class RoomConversationRepository(
     private val db: NishuDatabase,
     private val onCancel: suspend (Long) -> Unit = {},
     private val onRetry: suspend (Long) -> Unit = {},
+    private val onRetranscribe: suspend (Long, String?) -> Unit = { _, _ -> },
 ) : ConversationRepository {
     private val uiModels: Flow<List<ConversationUiModel>> =
         combine(db.conversations().observeAll(), db.summaries().observeAll()) { convs, sums ->
@@ -47,7 +50,7 @@ class RoomConversationRepository(
         }
 
     override fun counts(): Flow<HomeCounts> =
-        combine(db.conversations().countAll(), db.tasks().countOpen(), db.memory().count()) { c, t, f -> HomeCounts(c, t, f) }
+        combine(db.conversations().countAll(), db.tasks().countOpen(), db.memory().count(), db.decisions().count()) { c, t, f, d -> HomeCounts(c, t, f, d) }
 
     override fun recent(limit: Int) = uiModels.map { it.take(limit) }
 
@@ -59,7 +62,12 @@ class RoomConversationRepository(
         combine(db.transcripts().observe(id), db.speakers().observe(id)) { segments, names ->
             val custom = names.associate { it.label to it.name }
             segments.map { s ->
-                val ref = s.speakerLabel?.let { SpeakerRef(it, custom[it]?.takeIf { n -> n.isNotBlank() } ?: defaultSpeakerName(it)) }
+                val label = s.speakerLabel?.takeIf { it.isNotBlank() } ?: "S1"
+                val resolvedName = custom[label]?.takeIf { n -> n.isNotBlank() }
+                    ?: custom["Speaker ${label.removePrefix("S")}"]?.takeIf { n -> n.isNotBlank() }
+                    ?: custom["S" + label.removePrefix("Speaker ")]?.takeIf { n -> n.isNotBlank() }
+                    ?: defaultSpeakerName(label)
+                val ref = SpeakerRef(label, resolvedName)
                 TranscriptLine(s.startMs, s.text, ref)
             }
         }
@@ -87,8 +95,40 @@ class RoomConversationRepository(
     override fun transcript(id: Long) = lines(id)
 
     override suspend fun renameSpeaker(id: Long, label: String, name: String) {
-        if (name.isBlank()) db.speakers().clear(id, label) else db.speakers().upsert(SpeakerNameEntity(id, label, name.trim()))
+        val normLabel = com.nishu.app.stt.SpeakerVoiceMatcher.normalizeLabel(label)
+        val friendlyLabel = if (normLabel.startsWith("S")) "Speaker ${normLabel.removePrefix("S")}" else normLabel
+        if (name.isBlank()) {
+            db.speakers().clear(id, normLabel)
+            db.speakers().clear(id, friendlyLabel)
+        } else {
+            val trimmedName = name.trim()
+            db.speakers().upsert(SpeakerNameEntity(id, normLabel, trimmedName))
+            db.speakers().upsert(SpeakerNameEntity(id, friendlyLabel, trimmedName))
+            // Cross-session biometric memory: enroll voiceprint so this person is remembered in future recordings
+            runCatching {
+                val conv = db.conversations().get(id)
+                val audioPath = conv?.audioPath
+                if (audioPath != null) {
+                    val audioFile = File(audioPath)
+                    val sttRoot = File(com.nishu.app.AppGraph.appContext.filesDir, "models/stt")
+                    val segments = db.transcripts().get(id)
+                    android.util.Log.i("RoomRepositories", "Enrolling voiceprint for '$trimmedName' on audio: ${audioFile.absolutePath}")
+                    com.nishu.app.stt.SpeakerVoiceMatcher.enrollVoiceFromSegments(
+                        db = db,
+                        modelRoot = sttRoot,
+                        wav = audioFile,
+                        segments = segments,
+                        speakerLabel = normLabel,
+                        name = trimmedName,
+                    )
+                }
+            }.onFailure {
+                android.util.Log.e("RoomRepositories", "Failed to enroll voiceprint for '$trimmedName'", it)
+            }
+        }
     }
+
+    override fun speakerProfiles(): Flow<List<SpeakerProfileEntity>> = db.speakerProfiles().observeAll()
 
     override fun processing(id: Long): Flow<Map<ProcessingStage, StepState>> = db.conversations().observe(id).map { c ->
         val stages = ProcessingStage.entries
@@ -129,6 +169,17 @@ class RoomConversationRepository(
     override suspend fun retryProcessing(id: Long) {
         db.conversations().setStatus(id, "RECORDED", null, null)
         onRetry(id)
+    }
+
+    override suspend fun retranscribe(id: Long, modelId: String?) {
+        db.transcripts().clear(id)
+        db.summaries().clear(id)
+        db.tasks().clear(id)
+        db.decisions().clear(id)
+        db.conversations().get(id)?.let { current ->
+            db.conversations().update(current.copy(status = "RECORDED", stage = null, statusDetail = null, sttModelId = modelId ?: current.sttModelId))
+        } ?: db.conversations().setStatus(id, "RECORDED", null, null)
+        onRetranscribe(id, modelId)
     }
 
     override suspend fun audioPath(id: Long): String? = db.conversations().get(id)?.audioPath

@@ -1,6 +1,8 @@
 # Pushes models into the debug app's private storage (run-as needs a debug build).
 # Models survive app updates (adb install -r) but not uninstall. Uses ANDROID_SERIAL if set.
-$adb = "C:\Users\ACER\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+$adb = if (Get-Command adb.exe -ErrorAction SilentlyContinue) { (Get-Command adb.exe).Source }
+       elseif (Test-Path "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe") { "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" }
+       else { "C:\Users\ACER\AppData\Local\Android\Sdk\platform-tools\adb.exe" }
 $pkg = "com.nishu.app"
 $bin = "D:\nishant\llm_research\llama_bin"
 $tool = "D:\nishant\toolchain"
@@ -40,6 +42,12 @@ $base = "$tool\stt-eval\sherpa-onnx-whisper-base"
 Push-One "$base\base-encoder.int8.onnx" "stt/whisper-base/base-encoder.int8.onnx"
 Push-One "$base\base-decoder.int8.onnx" "stt/whisper-base/base-decoder.int8.onnx"
 Push-One "$base\base-tokens.txt" "stt/whisper-base/base-tokens.txt"
+
+# Whisper Small (Multilingual / English / Hinglish mode)
+$small = "$tool\stt-eval\sherpa-onnx-whisper-small"
+Push-One "$small\small-encoder.int8.onnx" "stt/whisper-small/small-encoder.int8.onnx"
+Push-One "$small\small-decoder.int8.onnx" "stt/whisper-small/small-decoder.int8.onnx"
+Push-One "$small\small-tokens.txt" "stt/whisper-small/small-tokens.txt"
 
 # Speaker identification
 Push-One "$tool\diar\sherpa-onnx-pyannote-segmentation-3-0\model.int8.onnx" "stt/diar/pyannote-segmentation-3-0.int8.onnx"

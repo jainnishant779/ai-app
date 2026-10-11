@@ -25,9 +25,22 @@ data class ConversationUiModel(
     val durationLabel: String,
     val preview: String,
     val status: ConversationStatus,
-)
+    val sttModelId: String? = null,
+) {
+    val sttModelLabel: String
+        get() = when {
+            sttModelId == null -> "Swift (Hinglish Base)"
+            sttModelId.contains("swift", ignoreCase = true) -> "Swift (Hinglish Base)"
+            sttModelId.contains("small", ignoreCase = true) -> "Whisper Small (High Accuracy)"
+            sttModelId.contains("qwen", ignoreCase = true) -> "Qwen3-ASR (Bilingual)"
+            sttModelId.contains("base", ignoreCase = true) -> "Whisper Base"
+            sttModelId.contains("tiny", ignoreCase = true) -> "Whisper Tiny"
+            sttModelId == "auto" -> "Auto (Optimal)"
+            else -> sttModelId
+        }
+}
 
-data class HomeCounts(val recordings: Int, val openTasks: Int, val facts: Int)
+data class HomeCounts(val recordings: Int, val openTasks: Int, val facts: Int, val decisions: Int = 0)
 
 /** [label] is the stable key ("S1"); [name] is what to show ("Speaker 1", or whatever the user renamed it to). */
 data class SpeakerRef(val label: String, val name: String) {
@@ -99,6 +112,7 @@ data class SettingsInfo(
     val userName: String,
     val languageCode: String = "hinglish",
     val customVocabulary: String = "",
+    val selectedSttModel: String = "auto",
 )
 
 data class BenchmarkResultUiModel(

@@ -51,9 +51,15 @@ __pycache__/
 
 # Private data copied off the phone, and test audio: never commit
 tools/*.db
+tools/*.db-wal
+tools/*.db-shm
 tools/*.wav
 tools/hf_samples/
 tools/test_out.txt
+tools/models/
+
+# Kotlin cache
+.kotlin/
 
 # Trained model weights (1+ GB; kept on Google Drive / external backup, not in git)
 final-model*/

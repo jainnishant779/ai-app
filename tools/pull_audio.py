@@ -1,10 +1,12 @@
 import subprocess
 import wave
 
-adb = r"C:\Users\ACER\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+import shutil
+
+adb = shutil.which("adb") or r"C:\Users\nishant\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 device = "ZA222ZJMQG"
 
-for num in [41, 42, 43]:
+for num in [198, 199]:
     out_path = f"tools/{num}.wav"
     with open(out_path, "wb") as f:
         subprocess.run([adb, "-s", device, "exec-out", "run-as", "com.nishu.app", "cat", f"files/recordings/{num}.wav"], stdout=f)

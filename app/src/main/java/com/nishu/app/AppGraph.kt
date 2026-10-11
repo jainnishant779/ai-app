@@ -50,6 +50,7 @@ object AppGraph {
         private set
 
     val benchmark: BenchmarkRepository by lazy { FakeBenchmarkRepository() }
+    val modelSync: com.nishu.app.sync.ModelSyncManager by lazy { com.nishu.app.sync.ModelSyncManager(appContext) }
 
     /** Called when a recording has been finalized. */
     var onRecorded: suspend (Long) -> Unit = {}
@@ -70,6 +71,7 @@ object AppGraph {
             database,
             onCancel = { Pipeline.cancel(appContext, it) },
             onRetry = { Pipeline.enqueue(appContext, it, replace = true) },
+            onRetranscribe = { id, modelId -> Pipeline.enqueue(appContext, id, replace = true, modelOverride = modelId) },
         )
         memory = RoomMemoryRepository(database, LlmQuestionAnswerer())
         search = RoomSearchRepository(database)

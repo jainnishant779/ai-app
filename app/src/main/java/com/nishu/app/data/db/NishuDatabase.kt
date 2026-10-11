@@ -11,9 +11,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         ConversationEntity::class, TranscriptSegmentEntity::class, TranscriptFts::class,
         SummaryEntity::class, TaskEntity::class, DecisionEntity::class, MemoryFactEntity::class,
-        SpeakerNameEntity::class,
+        SpeakerNameEntity::class, SpeakerProfileEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class NishuDatabase : RoomDatabase() {
@@ -24,6 +24,7 @@ abstract class NishuDatabase : RoomDatabase() {
     abstract fun decisions(): DecisionDao
     abstract fun memory(): MemoryDao
     abstract fun speakers(): SpeakerDao
+    abstract fun speakerProfiles(): SpeakerProfileDao
 
     companion object {
         /** v2: user-editable speaker names. Existing recordings keep working; their segments simply have no speaker. */
@@ -37,9 +38,19 @@ abstract class NishuDatabase : RoomDatabase() {
             }
         }
 
+        /** v3: persistent speaker profiles with 3D-Speaker biometric voiceprints. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `speaker_profile` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `embedding` TEXT NOT NULL, `sampleCount` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         fun create(context: Context): NishuDatabase =
             Room.databaseBuilder(context.applicationContext, NishuDatabase::class.java, "nishu.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         fun inMemory(context: Context): NishuDatabase =

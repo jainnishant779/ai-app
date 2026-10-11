@@ -111,6 +111,12 @@ interface TaskDao {
     @androidx.room.RewriteQueriesToDropUnusedColumns
     @Query("SELECT t.*, c.title AS conversationTitle FROM task t JOIN conversation c ON c.id = t.conversationId WHERE t.text LIKE :like ESCAPE '\\' ORDER BY t.id DESC LIMIT 40")
     fun search(like: String): Flow<List<TaskWithTitle>>
+
+    @Query("SELECT * FROM task ORDER BY id DESC")
+    fun observeAll(): Flow<List<TaskEntity>>
+
+    @Insert
+    suspend fun insert(task: TaskEntity): Long
 }
 
 data class TaskWithTitle(
@@ -129,11 +135,20 @@ interface DecisionDao {
 
     @Query("SELECT * FROM decision WHERE conversationId = :id ORDER BY id")
     fun observe(id: Long): Flow<List<DecisionEntity>>
+
+    @Query("SELECT COUNT(*) FROM decision")
+    fun count(): Flow<Int>
+
+    @Query("SELECT * FROM decision ORDER BY id DESC")
+    fun observeAll(): Flow<List<DecisionEntity>>
 }
 
 @Dao
 interface SpeakerDao {
     @androidx.room.Upsert suspend fun upsert(s: SpeakerNameEntity)
+
+    @Query("SELECT * FROM speaker_name WHERE conversationId = :id AND label = :label")
+    suspend fun get(id: Long, label: String): SpeakerNameEntity?
 
     @Query("DELETE FROM speaker_name WHERE conversationId = :id AND label = :label")
     suspend fun clear(id: Long, label: String)
@@ -163,4 +178,24 @@ interface MemoryDao {
 
     @Query("SELECT COUNT(*) FROM memory_fact")
     fun count(): Flow<Int>
+}
+
+@Dao
+interface SpeakerProfileDao {
+    @androidx.room.Upsert suspend fun upsert(profile: SpeakerProfileEntity)
+
+    @Query("SELECT * FROM speaker_profile ORDER BY name ASC")
+    fun observeAll(): Flow<List<SpeakerProfileEntity>>
+
+    @Query("SELECT * FROM speaker_profile")
+    suspend fun getAll(): List<SpeakerProfileEntity>
+
+    @Query("SELECT * FROM speaker_profile WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun findByName(name: String): SpeakerProfileEntity?
+
+    @Query("DELETE FROM speaker_profile WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM speaker_profile WHERE name = :name COLLATE NOCASE")
+    suspend fun deleteByName(name: String)
 }

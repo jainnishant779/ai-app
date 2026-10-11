@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -204,47 +206,59 @@ data class BottomTab(val route: String, val label: String, val icon: ImageVector
 
 @Composable
 fun NishuBottomBar(tabs: List<BottomTab>, currentRoute: String?, onSelect: (String) -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 0.dp,
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .navigationBarsPadding(),
+        contentAlignment = Alignment.Center,
     ) {
-        NavigationBar(
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp,
-            modifier = Modifier.height(Dimens.BottomBarHeight),
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            shadowElevation = 8.dp,
+            modifier = Modifier.fillMaxWidth().height(64.dp),
         ) {
-            tabs.forEach { tab ->
-                val selected = currentRoute == tab.route
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { onSelect(tab.route) },
-                    icon = {
-                        Icon(
-                            tab.icon,
-                            contentDescription = null,
-                            tint = if (selected) NishuPalette.Primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    },
-                    label = {
-                        Text(
-                            tab.label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            ),
-                            color = if (selected) NishuPalette.Primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    alwaysShowLabel = true,
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = NishuPalette.Primary,
-                        selectedTextColor = NishuPalette.Primary,
-                        indicatorColor = NishuPalette.PrimaryLight,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                tabs.forEach { tab ->
+                    val selected = currentRoute == tab.route
+                    val source = remember { MutableInteractionSource() }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (selected) NishuPalette.PrimaryLight else Color.Transparent)
+                            .clickable(interactionSource = source, indication = null) { onSelect(tab.route) }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                tab.icon,
+                                contentDescription = tab.label,
+                                tint = if (selected) NishuPalette.Primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                tab.label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
+                                color = if (selected) NishuPalette.Primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -8,18 +8,29 @@ import sys
 from pathlib import Path
 
 TRAIN = Path(r"D:\nishant\llm_research\data\v2\final\train.jsonl")
+GOLDEN = Path(__file__).resolve().parent.parent / "app" / "src" / "sharedTest" / "golden" / "04_tool_call_prompt.messages.json"
 OUT = Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "assets" / "system_prompt.bin"
 EXPECTED_LEN = 1024
 EXPECTED_SHA = "0d30a62b8de680791d8acbc8a14e5d62df0d0cca2c4474a3ae63a98aead6f3c3"
 
 
 def main() -> int:
-    with TRAIN.open("rb") as f:
-        first = json.loads(f.readline())
-    data = first["messages"][0]["content"].encode("utf-8")
+    if TRAIN.exists():
+        with TRAIN.open("rb") as f:
+            first = json.loads(f.readline())
+        data = first["messages"][0]["content"].encode("utf-8")
+    elif GOLDEN.exists():
+        with GOLDEN.open("r", encoding="utf-8") as f:
+            msgs = json.load(f)
+        data = msgs[0]["content"].encode("utf-8")
+    else:
+        print("FAIL: Neither train.jsonl nor golden messages found", file=sys.stderr)
+        return 1
+
     sha = hashlib.sha256(data).hexdigest()
+    cr_count = data.count(b"\r")
     if len(data) != EXPECTED_LEN or b"\r" in data or sha != EXPECTED_SHA:
-        print(f"FAIL: len={len(data)} CR={data.count(b'\\r')} sha256={sha}", file=sys.stderr)
+        print(f"FAIL: len={len(data)} CR={cr_count} sha256={sha}", file=sys.stderr)
         return 1
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(data)
@@ -29,3 +40,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

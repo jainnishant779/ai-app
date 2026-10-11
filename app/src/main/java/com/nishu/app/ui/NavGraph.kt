@@ -16,6 +16,9 @@ import androidx.compose.material.icons.rounded.FolderSpecial
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Folder
+import com.nishu.app.ui.thinklist.ThinkListRoute
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -66,6 +69,7 @@ object Routes {
     const val CHAT = "chat"
     const val RECORDING_CHAT = "chat/{id}?title={title}"
     const val DIAGNOSTICS = "diagnostics"
+    const val THINK_LIST = "think_list"
 
     fun conversation(id: Long) = "conversation/$id"
     fun audioDetails(id: Long) = "audio_details/$id"
@@ -76,9 +80,9 @@ object Routes {
 
 private val tabs = listOf(
     BottomTab(Routes.HOME, "Home", Icons.Rounded.Home),
-    BottomTab(Routes.CONVERSATIONS, "History", Icons.Rounded.History),
+    BottomTab(Routes.THINK_LIST, "Think-List", Icons.Rounded.Checklist),
     BottomTab(Routes.CHAT, "Chat", Icons.Rounded.AutoAwesome),
-    BottomTab(Routes.MEMORY, "Memory", Icons.Rounded.FolderSpecial),
+    BottomTab(Routes.CONVERSATIONS, "Library", Icons.Rounded.Folder),
 )
 
 private val idArg = listOf(navArgument("id") { type = NavType.LongType })
@@ -142,8 +146,10 @@ fun NishuApp() {
                     onSeeAll = { nav.switchTab(Routes.CONVERSATIONS) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenChat = { nav.switchTab(Routes.CHAT) },
+                    onOpenThinkList = { nav.switchTab(Routes.THINK_LIST) },
                 )
             }
+            composable(Routes.THINK_LIST) { ThinkListRoute() }
             composable(Routes.CONVERSATIONS) {
                 ConversationsRoute(onOpen = { nav.navigate(Routes.conversation(it)) }, onSearch = { nav.navigate(Routes.SEARCH) })
             }

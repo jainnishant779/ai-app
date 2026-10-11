@@ -82,9 +82,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val lang = inputData.getString("language")
             ?: prefs.getString("audio_language", "hinglish")
             ?: "hinglish"
+        val modelOverride = inputData.getString("stt_model_override")
+            ?: prefs.getString("stt_model_override", "auto") ?: "auto"
         val userName = prefs.getString("user_name", "") ?: ""
         val customVocab = prefs.getString("custom_vocabulary", "") ?: ""
-        val spec = SttModelSpec.select(sttRoot, lang)
+        val spec = SttModelSpec.select(sttRoot, lang, modelOverride)
         val stt = SherpaOnnxStt(sttRoot, spec = spec, userName = userName, customVocabulary = customVocab)
         return try {
             // Who spoke when first; the diarizer is released before recognition starts, so the models are never resident together.
@@ -94,6 +96,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 .getOrDefault(emptyList())
             Log.i(TAG, "diarization: ${turns.map { it.speaker }.distinct().size} speaker(s), ${turns.size} turn(s)")
             Trace.log(id, "diarization done: ${turns.map { it.speaker }.distinct().size} speaker(s), ${turns.size} turn(s)")
+
+            // Cross-session speaker memory: match voiceprints against saved profiles
+            runCatching {
+                com.nishu.app.stt.SpeakerVoiceMatcher.matchAndAssignSpeakers(db, sttRoot, audio, turns, id)
+            }.onFailure { Log.w(TAG, "speaker voice matching skipped", it) }
+
             // Cleared only now, so the old transcript stays visible while speakers are identified; a re-run starts from scratch, so no stale summary or tasks outlive a new transcript.
             db.transcripts().clear(id)
             db.summaries().clear(id)
@@ -175,11 +183,12 @@ object Pipeline {
     private fun name(id: Long) = "process-$id"
 
     /** Transcribe, then summarize. Two chained workers so the STT and LLM models are never loaded together. */
-    fun enqueue(context: Context, id: Long, replace: Boolean = false, language: String? = null) {
+    fun enqueue(context: Context, id: Long, replace: Boolean = false, language: String? = null, modelOverride: String? = null) {
         val lang = language ?: context.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("audio_language", null)
         val data = workDataOf(
             KEY_ID to id,
             "language" to lang,
+            "stt_model_override" to modelOverride,
         )
         val transcribe = OneTimeWorkRequestBuilder<TranscribeWorker>().setInputData(data).build()
         val summarize = OneTimeWorkRequestBuilder<SummarizeWorker>().setInputData(data).build()

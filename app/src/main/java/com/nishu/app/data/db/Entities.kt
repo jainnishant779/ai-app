@@ -115,3 +115,14 @@ data class MemoryFactEntity(
     val sourceStartMs: Long? = null,
     val createdAt: Long,
 )
+
+/** Persistent biometric voice profile saved across all conversations. */
+@Entity(tableName = "speaker_profile")
+data class SpeakerProfileEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    /** Comma-separated 512-dim embedding floats from 3D-Speaker CAM++ model. */
+    val embedding: String,
+    val sampleCount: Int = 1,
+    val createdAt: Long = System.currentTimeMillis(),
+)

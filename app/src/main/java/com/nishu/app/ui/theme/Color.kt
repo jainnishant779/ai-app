@@ -7,37 +7,37 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 object NishuPalette {
-    // Primary brand colors
-    val Primary = Color(0xFF174C3C) // Deep Forest Green
-    val PrimaryLight = Color(0xFFE2EFE5) // Pale Mint Container
-    val Secondary = Color(0xFF789681) // Muted Sage
-    val Accent = Color(0xFFE2EFE5) // Pale Mint Accent
+    // Primary brand colors from nishu_iot_ai.html
+    val Primary = Color(0xFF1D6047) // Forest Green (--green: #1d6047)
+    val PrimaryLight = Color(0xFFD8F3DF) // Mint Container (--mint: #d8f3df)
+    val Secondary = Color(0xFF2C805C) // Vibrant Green (--green2: #2c805c)
+    val Accent = Color(0xFFD8F3DF) // Mint Accent
 
     // Functional & category accents
-    val Lavender = Color(0xFFEAE5FF) // Supporting category / Import
-    val SoftBlue = Color(0xFFE5EEFF) // Work / Custom
-    val Peach = Color(0xFFFFF0DF) // Meeting / Highlight
-    val Mint = Color(0xFFE2EFE5) // Note / Success tint
+    val Lavender = Color(0xFFEAE5FF)
+    val SoftBlue = Color(0xFFE5EEFF)
+    val Peach = Color(0xFFFFF0DF)
+    val Mint = Color(0xFFD8F3DF)
 
-    // Neutrals
-    val WarmIvory = Color(0xFFF7F5EE) // Background
-    val SurfaceWarm = Color(0xFFFFFEFA) // Card Surface
-    val TextMain = Color(0xFF17231F) // Deep Pine Charcoal
-    val TextSecondary = Color(0xFF737B75) // Muted Slate Green
-    val Divider = Color(0xFFEAE9E1) // Clean divider
+    // Neutrals matching nishu_iot_ai.html
+    val WarmIvory = Color(0xFFF2F6F3) // Background (--bg: #f2f6f3)
+    val SurfaceWarm = Color(0xFFFFFFFF) // Card Surface (--card: #fff)
+    val TextMain = Color(0xFF14251B) // Ink (--ink: #14251b)
+    val TextSecondary = Color(0xFF718177) // Muted (--muted: #718177)
+    val Divider = Color(0xFFDFE9E2) // Line (--line: #dfe9e2)
 
     // Feedback
-    val Success = Color(0xFF174C3C)
+    val Success = Color(0xFF20C981) // Pulsing active dot #20c981
     val Warning = Color(0xFFD97706)
-    val Danger = Color(0xFFF04444) // Error / Recording stop
+    val Danger = Color(0xFFEF3157) // Recording Red / Stop (--red: #ef3157)
 
     // Recording theme
-    val RecordingBgDark = Color(0xFF0D2D23)
-    val RecordingBgLight = Color(0xFF174C3C)
+    val RecordingBgDark = Color(0xFF06140D)
+    val RecordingBgLight = Color(0xFF174D36)
 
     // Button gradient (Deep Forest to Emerald Sage)
-    val CtaStart = Color(0xFF174C3C)
-    val CtaEnd = Color(0xFF1F5B49)
+    val CtaStart = Color(0xFF1D6047)
+    val CtaEnd = Color(0xFF2C805C)
 }
 
 val NishuCtaGradient: Brush = Brush.horizontalGradient(listOf(NishuPalette.CtaStart, NishuPalette.CtaEnd))
