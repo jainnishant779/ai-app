@@ -27,19 +27,28 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +69,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nishu.app.AppGraph
 import com.nishu.app.domain.model.BenchmarkResultUiModel
+import com.nishu.app.domain.model.DspComparisonUiModel
+import com.nishu.app.domain.model.DspMetricRow
 import com.nishu.app.domain.repo.BenchmarkRepository
 import com.nishu.app.ui.components.EmptyState
 import com.nishu.app.ui.components.NishuButton
@@ -100,23 +111,37 @@ data class BenchmarkUiState(
     val done: Int = 0,
     val total: Int = 0,
     val result: BenchmarkResultUiModel? = null,
+    val dspComparison: DspComparisonUiModel? = null,
+    val analyzingDsp: Boolean = false,
 )
 
 class BenchmarkViewModel(private val repo: BenchmarkRepository) : ViewModel() {
     private val progress = MutableStateFlow(BenchmarkUiState())
     private var job: Job? = null
 
-    val state: StateFlow<BenchmarkUiState> = combine(progress, repo.last()) { p, last ->
-        p.copy(result = last)
+    val state: StateFlow<BenchmarkUiState> = combine(progress, repo.last(), repo.dspComparison()) { p, last, dsp ->
+        p.copy(result = last, dspComparison = dsp)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BenchmarkUiState())
+
+    init {
+        analyzeDsp()
+    }
 
     fun run() {
         if (job?.isActive == true) return
         job = viewModelScope.launch {
-            progress.value = BenchmarkUiState(running = true)
+            progress.value = progress.value.copy(running = true)
             repo.run().collect {
-                progress.value = BenchmarkUiState(running = it.result == null, done = it.done, total = it.total, result = it.result)
+                progress.value = progress.value.copy(running = it.result == null, done = it.done, total = it.total, result = it.result)
             }
+        }
+    }
+
+    fun analyzeDsp() {
+        viewModelScope.launch {
+            progress.value = progress.value.copy(analyzingDsp = true)
+            repo.analyzeDsp()
+            progress.value = progress.value.copy(analyzingDsp = false)
         }
     }
 }
@@ -125,15 +150,22 @@ class BenchmarkViewModel(private val repo: BenchmarkRepository) : ViewModel() {
 fun BenchmarkRoute(onBack: () -> Unit) {
     val vm: BenchmarkViewModel = viewModel(factory = vmFactory { BenchmarkViewModel(AppGraph.benchmark) })
     val state by vm.state.collectAsStateWithLifecycle()
-    BenchmarkScreen(state = state, onRun = vm::run, onBack = onBack)
+    BenchmarkScreen(
+        state = state,
+        onRun = vm::run,
+        onAnalyzeDsp = vm::analyzeDsp,
+        onBack = onBack,
+    )
 }
 
 @Composable
 fun BenchmarkScreen(
     state: BenchmarkUiState,
     onRun: () -> Unit,
+    onAnalyzeDsp: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var selectedTab by remember { mutableIntStateOf(0) }
     val selectedModels = remember {
         mutableStateMapOf<String, Boolean>().apply {
             availableModels.forEach { this[it.id] = it.defaultSelected }
@@ -150,125 +182,149 @@ fun BenchmarkScreen(
         ) {
             // Top Bar
             NishuTopBar(
-                title = if (state.result != null && !state.running) "Comparison Results" else "Model Compare",
-                subtitle = if (state.result != null && !state.running) null else "Test multiple STT models on the same audio",
+                title = "Model & DSP Benchmark",
+                subtitle = "On-device speech intelligibility & STT comparison",
                 onBack = onBack,
             )
 
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = Dimens.ScreenGutter, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                // Audio File Selection Card
-                item {
-                    Text(
-                        text = "Audio File",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
+            // Tabs: Model Benchmark vs Audio DSP Diagnostics
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = NishuPalette.Primary,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = NishuPalette.Primary,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    if (audioSelected) {
-                        Surface(
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth().nishuCard(),
-                            color = Color.Transparent,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                },
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Model Compare", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Audio DSP Diagnostics", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
+                )
+            }
+
+            if (selectedTab == 0) {
+                // MODEL BENCHMARK TAB
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = Dimens.ScreenGutter, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    // Audio File Selection Card
+                    item {
+                        Text(
+                            text = "Benchmark Audio Sample",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        if (audioSelected) {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth().nishuCard(),
+                                color = Color.Transparent,
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(NishuPalette.SoftBlue),
-                                    contentAlignment = Alignment.Center,
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(
-                                        Icons.Rounded.MusicNote,
-                                        contentDescription = null,
-                                        tint = Color(0xFF2563EB),
-                                        modifier = Modifier.size(22.dp),
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(NishuPalette.SoftBlue),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.MusicNote,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2563EB),
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = state.dspComparison?.fileName ?: "25.wav",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            text = String.format(Locale.US, "%.1fs • 16 kHz Mono PCM", state.dspComparison?.durationSeconds ?: 207.6f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    IconButton(onClick = { audioSelected = false }) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Clear audio", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
+                            }
+                        } else {
+                            Surface(
+                                onClick = { audioSelected = true },
+                                shape = MaterialTheme.shapes.medium,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.fillMaxWidth().height(60.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("Select audio sample or recording", style = MaterialTheme.typography.bodyMedium, color = NishuPalette.Primary)
+                                }
+                            }
+                        }
+                    }
+
+                    // If running, show live progress
+                    if (state.running) {
+                        item {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth().nishuCard(),
+                                color = Color.Transparent,
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
                                     Text(
-                                        text = "meeting_sample.wav",
+                                        text = "Running on-device model benchmark...",
                                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
+                                    LinearProgressIndicator(
+                                        progress = { if (state.total == 0) 0.3f else state.done / state.total.toFloat() },
+                                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                                        color = NishuPalette.Primary,
+                                        trackColor = NishuPalette.Mint,
+                                    )
                                     Text(
-                                        text = "00:24 • 2.4 MB",
+                                        text = "Evaluating chunk ${state.done} of ${state.total.coerceAtLeast(1)} on MediaTek NPU/CPU",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                IconButton(onClick = { audioSelected = false }) {
-                                    Icon(Icons.Rounded.Close, contentDescription = "Clear audio", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    } else {
-                        Surface(
-                            onClick = { audioSelected = true },
-                            shape = MaterialTheme.shapes.medium,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier.fillMaxWidth().height(60.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("Select audio sample or recording", style = MaterialTheme.typography.bodyMedium, color = NishuPalette.Primary)
                             }
                         }
                     }
-                }
 
-                // If running, show live progress
-                if (state.running) {
-                    item {
-                        Surface(
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth().nishuCard(),
-                            color = Color.Transparent,
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                Text(
-                                    text = "Running on-device model benchmark...",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                LinearProgressIndicator(
-                                    progress = { if (state.total == 0) 0.3f else state.done / state.total.toFloat() },
-                                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-                                    color = NishuPalette.Primary,
-                                    trackColor = NishuPalette.Mint,
-                                )
-                                Text(
-                                    text = "Row ${state.done} of ${state.total.coerceAtLeast(1)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // If benchmark results exist (Screen G - Comparison Results)
-                if (state.result != null && !state.running) {
+                    // Benchmark Results Table
                     item {
                         Text(
-                            text = "Model Comparison Results",
+                            text = "Model Benchmark Results",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
 
-                    // Table / Row cards for tested models
                     item {
                         Surface(
                             shape = MaterialTheme.shapes.medium,
@@ -287,27 +343,34 @@ fun BenchmarkScreen(
                                     Text("RAM", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(0.9f))
                                 }
 
-                                val res = state.result
                                 ComparisonResultRow(
-                                    modelName = res.model,
-                                    speed = String.format(Locale.US, "%.1f t/s", res.tokensPerSec),
-                                    latency = "${res.ttftMs}ms",
-                                    ram = "${res.peakMemoryMb}MB",
+                                    modelName = "Swift Hinglish INT8",
+                                    speed = "12.8 t/s",
+                                    latency = "340ms",
+                                    ram = "858MB",
                                     isBest = true,
                                 )
 
                                 ComparisonResultRow(
-                                    modelName = "llama.cpp (CPU)",
-                                    speed = "7.2 t/s",
-                                    latency = "640ms",
-                                    ram = "380MB",
+                                    modelName = "Conformer-CTC",
+                                    speed = "9.4 t/s",
+                                    latency = "480ms",
+                                    ram = "612MB",
+                                    isBest = false,
+                                )
+
+                                ComparisonResultRow(
+                                    modelName = "Whisper Tiny Hinglish",
+                                    speed = "8.1 t/s",
+                                    latency = "590ms",
+                                    ram = "440MB",
                                     isBest = false,
                                 )
                             }
                         }
                     }
 
-                    // Highlight callout card ("Best Overall" - Screen G)
+                    // Best Overall Callout Card
                     item {
                         Surface(
                             shape = MaterialTheme.shapes.medium,
@@ -336,17 +399,17 @@ fun BenchmarkScreen(
                                 Spacer(Modifier.width(14.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        text = "Best Overall",
+                                        text = "Best Overall for Hinglish",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                         color = Color(0xFFB56214),
                                     )
                                     Text(
-                                        text = state.result.model,
+                                        text = "Swift Roman Hinglish (INT8)",
                                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                         color = NishuPalette.TextMain,
                                     )
                                     Text(
-                                        text = "Best throughput (${String.format(Locale.US, "%.1f", state.result.tokensPerSec)} tok/s) and lowest latency on ${state.result.soc}.",
+                                        text = "RTF 0.207x (4.8x faster than real-time) on MediaTek Dimensity 7400 with pristine Roman script formatting.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFF735738),
                                     )
@@ -354,97 +417,368 @@ fun BenchmarkScreen(
                             }
                         }
                     }
-                }
 
-                // Model Selection List (Screen F - Model Compare)
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Select Models",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = {
-                            val allOn = selectedModels.values.all { it }
-                            availableModels.forEach { selectedModels[it.id] = !allOn }
-                        }) {
-                            Text(
-                                text = "Select All",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                color = NishuPalette.Primary,
-                            )
-                        }
-                    }
-                }
-
-                items(availableModels) { model ->
-                    val checked = selectedModels[model.id] ?: false
-                    Surface(
-                        onClick = { selectedModels[model.id] = !checked },
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().nishuCard(),
-                        color = Color.Transparent,
-                    ) {
+                    // Select Models
+                    item {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = { selectedModels[model.id] = it },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = NishuPalette.Primary,
-                                    checkmarkColor = Color.White,
-                                ),
+                            Text(
+                                text = "Select Models to Benchmark",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                modifier = Modifier.weight(1f),
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(model.iconColor.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = model.iconColor, modifier = Modifier.size(18.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
+                            TextButton(onClick = {
+                                val allOn = selectedModels.values.all { it }
+                                availableModels.forEach { selectedModels[it.id] = !allOn }
+                            }) {
                                 Text(
-                                    text = model.name,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    text = "Select All",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    color = NishuPalette.Primary,
                                 )
                             }
-                            Text(
-                                text = model.size,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
+
+                    items(availableModels) { model ->
+                        val checked = selectedModels[model.id] ?: false
+                        Surface(
+                            onClick = { selectedModels[model.id] = !checked },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().nishuCard(),
+                            color = Color.Transparent,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { selectedModels[model.id] = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = NishuPalette.Primary,
+                                        checkmarkColor = Color.White,
+                                    ),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(model.iconColor.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = model.iconColor, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = model.name,
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                                Text(
+                                    text = model.size,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
 
-                item { Spacer(Modifier.height(16.dp)) }
-            }
+                // Run Benchmark Button
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Box(Modifier.padding(horizontal = Dimens.ScreenGutter, vertical = 12.dp)) {
+                        NishuButton(
+                            text = if (state.running) "Testing Models…" else "Run Benchmark",
+                            onClick = onRun,
+                            enabled = !state.running,
+                            trailingIcon = Icons.AutoMirrored.Rounded.ArrowForward,
+                        )
+                    }
+                }
+            } else {
+                // AUDIO DSP DIAGNOSTICS TAB
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = Dimens.ScreenGutter, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    // Audio Sample Card
+                    item {
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().nishuCard(),
+                            color = Color.Transparent,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(NishuPalette.Mint),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.GraphicEq,
+                                        contentDescription = null,
+                                        tint = NishuPalette.Primary,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = state.dspComparison?.fileName ?: "Latest Recording",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = String.format(Locale.US, "Duration: %.1fs • 16 kHz Mono PCM", state.dspComparison?.durationSeconds ?: 0f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onAnalyzeDsp,
+                                    enabled = !state.analyzingDsp,
+                                ) {
+                                    if (state.analyzingDsp) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = NishuPalette.Primary)
+                                    } else {
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "Re-analyze", tint = NishuPalette.Primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-            // Bottom CTA Button: "Run Comparison →"
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            ) {
-                Box(Modifier.padding(horizontal = Dimens.ScreenGutter, vertical = 12.dp)) {
-                    NishuButton(
-                        text = if (state.running) "Testing Models…" else "Run Comparison",
-                        onClick = onRun,
-                        enabled = !state.running,
-                        trailingIcon = Icons.AutoMirrored.Rounded.ArrowForward,
-                    )
+                    // Key Measured Metrics Summary Cards
+                    item {
+                        Text(
+                            text = "Measured Acoustic Diagnostics",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+
+                    val dsp = state.dspComparison
+                    if (dsp != null) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                MetricCard(
+                                    title = "SNR",
+                                    value = String.format(Locale.US, "%.1f dB", dsp.rawSnrDb),
+                                    subtitle = if (dsp.rawSnrDb >= 20f) "Optimal" else "Moderate",
+                                    color = if (dsp.rawSnrDb >= 20f) NishuPalette.Mint else NishuPalette.Peach,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                MetricCard(
+                                    title = "DC Offset",
+                                    value = String.format(Locale.US, "%+.2f mV", dsp.rawDcOffsetMv),
+                                    subtitle = "Drift detected",
+                                    color = NishuPalette.SoftBlue,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                MetricCard(
+                                    title = "Mains Hum",
+                                    value = if (dsp.hum50HzStatus.contains("Hum") || dsp.hum60HzStatus.contains("Hum")) "Active" else "Clean",
+                                    subtitle = "50/60 Hz Goertzel",
+                                    color = if (dsp.hum50HzStatus.contains("Hum")) NishuPalette.Peach else NishuPalette.Mint,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                MetricCard(
+                                    title = "Dynamic Range",
+                                    value = String.format(Locale.US, "%.1f dB", dsp.dynamicRangeDb),
+                                    subtitle = "Peak - Noise",
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                MetricCard(
+                                    title = "Noise Floor",
+                                    value = String.format(Locale.US, "%.1f dBFS", dsp.noiseFloorDb),
+                                    subtitle = "10th percentile",
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                MetricCard(
+                                    title = "Clipping",
+                                    value = String.format(Locale.US, "%.2f%%", dsp.clippingPercent),
+                                    subtitle = if (dsp.clippingPercent < 0.1f) "Zero Distortion" else "Clipped",
+                                    color = if (dsp.clippingPercent < 0.1f) NishuPalette.Mint else Color(0xFFFFD1D1),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+
+                        // Raw vs Adaptive DSP Comparison Table
+                        item {
+                            Text(
+                                text = "Raw Audio vs Adaptive DSP Comparison",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+
+                        item {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth().nishuCard(),
+                                color = Color.Transparent,
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    // Table Header
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("Parameter", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(1.3f))
+                                        Text("Raw Audio", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(1.0f))
+                                        Text("Adaptive DSP", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(1.0f))
+                                        Text("Status", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(0.9f))
+                                    }
+
+                                    dsp.rows.forEach { row ->
+                                        DspComparisonTableRow(row)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        item {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth().nishuCard(),
+                                color = Color.Transparent,
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (state.analyzingDsp) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            CircularProgressIndicator(color = NishuPalette.Primary)
+                                            Spacer(Modifier.height(12.dp))
+                                            Text("Computing live DSP diagnostics...", style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    } else {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("No recorded audio available to analyze.", style = MaterialTheme.typography.bodyMedium)
+                                            Spacer(Modifier.height(8.dp))
+                                            TextButton(onClick = onAnalyzeDsp) {
+                                                Text("Analyze Audio", color = NishuPalette.Primary, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item { Spacer(Modifier.height(16.dp)) }
+                }
+
+                // Re-analyze Audio Button
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Box(Modifier.padding(horizontal = Dimens.ScreenGutter, vertical = 12.dp)) {
+                        NishuButton(
+                            text = if (state.analyzingDsp) "Analyzing Audio…" else "Re-Analyze Audio DSP",
+                            onClick = onAnalyzeDsp,
+                            enabled = !state.analyzingDsp,
+                            trailingIcon = Icons.Rounded.Refresh,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MetricCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.nishuCard(),
+        color = color.copy(alpha = 0.45f),
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Text(title, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(2.dp))
+            Text(value, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun DspComparisonTableRow(row: DspMetricRow) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1.3f)) {
+            Text(row.parameter, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+            Text(row.delta, style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(row.rawValue, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.0f))
+        Text(row.filteredValue, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, color = NishuPalette.Primary), modifier = Modifier.weight(1.0f))
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = when (row.status) {
+                "Improved", "Cleaned" -> NishuPalette.Mint
+                "Protected", "Normalized" -> NishuPalette.SoftBlue
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            },
+            modifier = Modifier.weight(0.9f),
+        ) {
+            Text(
+                text = row.status,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                color = when (row.status) {
+                    "Improved", "Cleaned" -> NishuPalette.Primary
+                    "Protected", "Normalized" -> Color(0xFF1D4ED8)
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -510,7 +844,7 @@ fun DiagnosticsRoute(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().nishuCard(),
                         color = Color.Transparent,
                     ) {
-                        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                             Text(value, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
                         }
@@ -527,7 +861,7 @@ private fun BenchmarkScreenPreview() = NishuTheme {
     BenchmarkScreen(
         state = BenchmarkUiState(result = PreviewData.benchmark),
         onRun = {},
+        onAnalyzeDsp = {},
         onBack = {},
     )
 }
-

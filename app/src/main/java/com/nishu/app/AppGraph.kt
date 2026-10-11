@@ -49,7 +49,7 @@ object AppGraph {
     lateinit var settings: SettingsRepository
         private set
 
-    val benchmark: BenchmarkRepository by lazy { FakeBenchmarkRepository() }
+    val benchmark: BenchmarkRepository by lazy { com.nishu.app.data.RealBenchmarkRepository(appContext) }
     val modelSync: com.nishu.app.sync.ModelSyncManager by lazy { com.nishu.app.sync.ModelSyncManager(appContext) }
 
     /** Called when a recording has been finalized. */

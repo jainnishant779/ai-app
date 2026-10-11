@@ -63,4 +63,6 @@ interface BenchmarkRepository {
     fun run(): Flow<BenchmarkProgress>
     fun last(): Flow<BenchmarkResultUiModel?>
     fun diagnostics(): Flow<DiagnosticsInfo>
+    fun dspComparison(): Flow<DspComparisonUiModel?>
+    suspend fun analyzeDsp(): DspComparisonUiModel?
 }

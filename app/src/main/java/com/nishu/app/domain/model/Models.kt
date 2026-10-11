@@ -129,3 +129,28 @@ data class BenchmarkResultUiModel(
 data class BenchmarkProgress(val done: Int, val total: Int, val result: BenchmarkResultUiModel? = null)
 
 data class DiagnosticsInfo(val rows: List<Pair<String, String>>)
+
+data class DspMetricRow(
+    val parameter: String,
+    val rawValue: String,
+    val filteredValue: String,
+    val delta: String,
+    val status: String,
+)
+
+data class DspComparisonUiModel(
+    val fileName: String,
+    val durationSeconds: Float,
+    val rawSnrDb: Float,
+    val filteredSnrDb: Float,
+    val rawDcOffsetMv: Float,
+    val filteredDcOffsetMv: Float,
+    val rawPeakDb: Float,
+    val filteredPeakDb: Float,
+    val noiseFloorDb: Float,
+    val dynamicRangeDb: Float,
+    val clippingPercent: Float,
+    val hum50HzStatus: String,
+    val hum60HzStatus: String,
+    val rows: List<DspMetricRow>,
+)

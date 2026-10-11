@@ -217,4 +217,8 @@ class FakeBenchmarkRepository : BenchmarkRepository {
             ),
         ),
     )
+
+    override fun dspComparison(): Flow<DspComparisonUiModel?> = flowOf(null)
+
+    override suspend fun analyzeDsp(): DspComparisonUiModel? = null
 }
