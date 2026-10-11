@@ -122,7 +122,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 db.transcripts().insert(
                     TranscriptSegmentEntity(
                         conversationId = id, startMs = seg.startMs, endMs = seg.endMs, text = seg.text,
-                        speakerLabel = SpeakerTurns.label(seg.speaker),
+                        speakerLabel = SpeakerTurns.label(seg.speaker, seg.isCrossTalk),
                     ),
                 )
             }

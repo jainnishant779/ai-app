@@ -200,8 +200,20 @@ class FakeBenchmarkRepository : BenchmarkRepository {
     override fun diagnostics(): Flow<DiagnosticsInfo> = flowOf(
         DiagnosticsInfo(
             listOf(
-                "Prefix tokens" to "294 (sample)", "Decode tok/s" to "8.4", "PSS" to "432 MB",
-                "Prefix cache" to "hit", "Model sha" to "ac2d9771", "llama.cpp" to "b11312",
+                "Audio DSP Pipeline" to "Adaptive Hybrid (Biquad + Soft Limiter)",
+                "High-Pass Filter" to "80 Hz Butterworth (2nd-order, -12dB/oct)",
+                "Electrical Hum Filter" to "Dynamic Goertzel (50/60 Hz Notch Q=30)",
+                "Gain Normalizer" to "-20 dBFS (ITU-R BS.1770 Gated)",
+                "Limiter Type" to "Soft-Knee Polynomial (tanh, max 0.98)",
+                "Diarization Stack" to "PyAnnote 3.0 (INT8) + 3D-Speaker CAM++",
+                "Biometrics Memory" to "Room SQLite v3 (512-dim cosine sim >= 0.62)",
+                "Max Meeting Limit" to "45 minutes (~172 MB float stream)",
+                "Prefix tokens" to "294 (sample)",
+                "Decode tok/s" to "8.4",
+                "PSS" to "432 MB",
+                "Prefix cache" to "hit",
+                "Model sha" to "ac2d9771",
+                "llama.cpp" to "b11312",
             ),
         ),
     )

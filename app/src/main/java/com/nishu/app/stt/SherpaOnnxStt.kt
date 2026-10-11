@@ -52,7 +52,7 @@ class SherpaOnnxStt(
         val tokens = if (qwen) "" else need(spec.tokens(modelRoot))
         val convFrontend = if (qwen) need(spec.convFrontend(modelRoot)) else ""
         val tokenizer = if (qwen) File(need(File(spec.tokenizerDir(modelRoot), "vocab.json"))).parent!! else ""
-        val (gain, noiseFloorDb) = if (preprocess) AudioPreprocessor.measure(wav) else (1f to AudioPreprocessor.DEFAULT_NOISE_FLOOR_DB)
+        val report = if (preprocess) AudioPreprocessor.analyze(wav) else null
 
         withContext(Dispatchers.Default) {
             val vad = Vad(null, VadModelConfig().apply {
@@ -94,7 +94,7 @@ class SherpaOnnxStt(
                 modelConfig.numThreads = numThreads
                 modelConfig.provider = provider
             })
-            val pre = AudioPreprocessor(gain, noiseFloorDb)
+            val pre = if (report != null) AudioPreprocessor.fromReport(report) else AudioPreprocessor(1f, AudioPreprocessor.DEFAULT_NOISE_FLOOR_DB)
             isFirstSegment = true
             val maxChunkSamples = if (qwen) 15 * SAMPLE_RATE else MAX_WHISPER_SAMPLES
             val batchSamples = if (qwen) 14 * SAMPLE_RATE else BATCH_SAMPLES
@@ -168,7 +168,7 @@ class SherpaOnnxStt(
                     // Each part keeps its own time span, clamped to the piece (padding is not speech time).
                     val startMs = segStartMs + (maxOf(a, from) - lead) * 1000L / SAMPLE_RATE
                     val endMs = segStartMs + (minOf(b, to) - lead) * 1000L / SAMPLE_RATE
-                    batcher.add(startMs, maxOf(startMs, endMs), piece.speaker, segSamples.copyOfRange(a, b))
+                    batcher.add(startMs, maxOf(startMs, endMs), piece.speaker, segSamples.copyOfRange(a, b), piece.isCrossTalk)
                         ?.let { recognize(recognizer, it, onSegment) }
                 }
             }
@@ -177,7 +177,7 @@ class SherpaOnnxStt(
 
     private suspend fun recognize(recognizer: OfflineRecognizer, batch: SpeechBatch, onSegment: suspend (Seg) -> Unit) {
         val text = recognize(recognizer, batch.samples, batch.endMs - batch.startMs)
-        if (text != null) onSegment(Seg(batch.startMs, batch.endMs, text, batch.speaker))
+        if (text != null) onSegment(Seg(batch.startMs, batch.endMs, text, batch.speaker, batch.isCrossTalk))
     }
 
     private fun recognize(recognizer: OfflineRecognizer, samples: FloatArray, durationMs: Long): String? {
@@ -189,7 +189,12 @@ class SherpaOnnxStt(
             val raw = recognizer.getResult(stream).text
             val ms = (System.nanoTime() - t0) / 1_000_000
             android.util.Log.i("NishuStt", "segment ${durationMs} ms of audio -> decode $ms ms, ${raw.length} chars")
-            return SttText.clean(raw, durationMs, userName, customVocabulary)
+            val cleaned = SttText.clean(raw, durationMs, userName, customVocabulary)
+            return if (cleaned != null && HinglishConverter.hasDevanagari(cleaned)) {
+                HinglishConverter.toHinglish(cleaned)
+            } else {
+                cleaned
+            }
         } finally {
             stream.release()
         }

@@ -3,7 +3,12 @@ package com.nishu.app.stt
 data class SpeakerTurn(val startMs: Long, val endMs: Long, val speaker: Int)
 
 /** A stretch of a speech segment spoken by one person. [speaker] is null when diarization gave no answer. */
-data class SpeakerPiece(val startMs: Long, val endMs: Long, val speaker: Int?) {
+data class SpeakerPiece(
+    val startMs: Long,
+    val endMs: Long,
+    val speaker: Int?,
+    val isCrossTalk: Boolean = false,
+) {
     val durationMs: Long get() = endMs - startMs
 }
 
@@ -31,8 +36,9 @@ object SpeakerTurns {
         val flat = ArrayList<SpeakerPiece>()
         for (p in clipped) {
             val last = flat.lastOrNull()
-            val start = if (last != null && p.startMs < last.endMs) last.endMs else p.startMs
-            if (p.endMs > start) flat += p.copy(startMs = start)
+            val overlap = (last != null && p.startMs < last.endMs)
+            val start = if (overlap) last!!.endMs else p.startMs
+            if (p.endMs > start) flat += p.copy(startMs = start, isCrossTalk = overlap)
         }
         if (flat.isEmpty()) return listOf(SpeakerPiece(segStartMs, segEndMs, null))
 
@@ -91,7 +97,8 @@ object SpeakerTurns {
         return out
     }
 
-    fun label(speaker: Int?): String? = speaker?.let { "S${it + 1}" }
+    fun label(speaker: Int?, isCrossTalk: Boolean = false): String? =
+        speaker?.let { if (isCrossTalk) "S${it + 1} (Cross-talk)" else "S${it + 1}" }
 }
 
 object SpeechChunks {
@@ -108,7 +115,13 @@ object SpeechChunks {
 }
 
 /** Speech from one speaker, ready for one recognizer call. */
-class SpeechBatch(val startMs: Long, val endMs: Long, val speaker: Int?, val samples: FloatArray)
+class SpeechBatch(
+    val startMs: Long,
+    val endMs: Long,
+    val speaker: Int?,
+    val samples: FloatArray,
+    val isCrossTalk: Boolean = false,
+)
 
 /**
  * Joins neighbouring speech segments of the same speaker into one recognizer call of at most [maxSamples]. Every call
@@ -122,19 +135,22 @@ class SpeechBatcher(
     private var startMs = 0L
     private var endMs = 0L
     private var speaker: Int? = null
+    private var isCrossTalk = false
     private var parts = ArrayList<FloatArray>()
     private var size = 0
 
     /** Adds speech; returns the batch this closed, if any. */
-    fun add(startMs: Long, endMs: Long, speaker: Int?, samples: FloatArray): SpeechBatch? {
+    fun add(startMs: Long, endMs: Long, speaker: Int?, samples: FloatArray, isCrossTalk: Boolean = false): SpeechBatch? {
         val gap = sampleRate / 5 // a short silence between joined segments, so words do not run together
         val closed = if (size > 0 && (speaker != this.speaker || startMs - this.endMs > maxGapMs || size + gap + samples.size > maxSamples)) flush() else null
         if (size == 0) {
             this.startMs = startMs
             this.speaker = speaker
+            this.isCrossTalk = isCrossTalk
         } else {
             parts += FloatArray(gap)
             size += gap
+            this.isCrossTalk = this.isCrossTalk || isCrossTalk
         }
         this.endMs = endMs
         parts += samples
@@ -147,9 +163,10 @@ class SpeechBatcher(
         val out = FloatArray(size)
         var at = 0
         for (p in parts) { p.copyInto(out, at); at += p.size }
-        val batch = SpeechBatch(startMs, endMs, speaker, out)
+        val batch = SpeechBatch(startMs, endMs, speaker, out, isCrossTalk)
         parts = ArrayList()
         size = 0
+        isCrossTalk = false
         return batch
     }
 }

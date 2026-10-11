@@ -1,22 +1,23 @@
 package com.nishu.app.stt
 
+import com.nishu.app.audio.AudioDiagnostics
+import com.nishu.app.audio.AudioReport
+import com.nishu.app.audio.BiquadFilter
+import com.nishu.app.audio.DcBlocker
+import com.nishu.app.audio.LoudnessNormalizer
 import java.io.File
-import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * Light clean-up applied before VAD and recognition, in this order:
- *
- * 1. **80 Hz high-pass** (one-pole IIR): cuts rumble, AC hum and handling noise.
- * 2. **7.5 kHz low-pass** (one-pole IIR): trims hiss near the 8 kHz Nyquist edge.
- * 3. **One gain for the whole recording**: brings speech frames to about -20 dBFS, at most +18 dB, never clipping.
- *
- * Pre-emphasis and an in-speech noise gate were tried and removed (they cut soft consonants). Measured with
- * tools/stt_ablation.py: these filters change the transcript very little; the recognition model is what matters.
- * [measureNoiseFloor] is computed but not used for gating.
+ * Production Audio Preprocessor combining:
+ * 1. DC offset removal (20 Hz leaky integrator).
+ * 2. 2nd-order Butterworth 80 Hz high-pass filter (-12 dB/octave, cuts handling noise and low rumble).
+ * 3. Conditional 50 Hz / 60 Hz electrical hum notch filter (active when mains hum is detected).
+ * 4. 2nd-order Butterworth 7.5 kHz low-pass filter (trims Nyquist boundary hiss).
+ * 5. ITU-R BS.1770-4 momentary loudness gain leveling (-20 dBFS target).
+ * 6. Soft-knee tanh polynomial limiter strictly preventing hard clipping distortion.
  */
 class AudioPreprocessor(
     private val gain: Float,
@@ -24,49 +25,55 @@ class AudioPreprocessor(
     sampleRate: Int = 16_000,
     highPassHz: Float = 80f,
     lowPassHz: Float = 7500f,
+    hasHum50Hz: Boolean = false,
+    hasHum60Hz: Boolean = false,
 ) {
-    // --- High-pass (1st-order IIR, cuts AC hum and mic handling rumble without hurting speech fundamentals) ---
-    private val aHP: Float = run {
-        val rc = 1f / (2f * PI.toFloat() * highPassHz)
-        val dt = 1f / sampleRate
-        rc / (rc + dt)
-    }
-    private var hpPrevX = 0f
-    private var hpPrevY = 0f
+    private val dcBlocker = DcBlocker(sampleRate, 20f)
+    private val hpFilter = BiquadFilter.createHighPass(sampleRate, highPassHz, 0.7071f)
+    private val notch50 = if (hasHum50Hz) BiquadFilter.createNotch(sampleRate, 50f, 8f) else null
+    private val notch60 = if (hasHum60Hz) BiquadFilter.createNotch(sampleRate, 60f, 8f) else null
+    private val lpFilter = BiquadFilter.createLowPass(sampleRate, lowPassHz, 0.7071f)
+    private val normalizer = LoudnessNormalizer(gain = gain)
 
-    // --- Low-pass (1st-order IIR, removes Nyquist boundary hiss) ---
-    private val aLP: Float = run {
-        val rc = 1f / (2f * PI.toFloat() * lowPassHz)
-        val dt = 1f / sampleRate
-        dt / (rc + dt)
-    }
-    private var lpPrevY = 0f
-
-    /** Filters [samples] in place and returns it. Keeps state across calls so chunk boundaries are seamless. */
+    /**
+     * Filters [samples] in place and returns it. Maintains filter states across chunks
+     * so streamed buffer processing is click-free and continuous.
+     */
     fun process(samples: FloatArray): FloatArray {
-        for (i in samples.indices) {
-            // Stage 1: High-pass filter (80 Hz rumble cut)
-            val x = samples[i]
-            val hp = aHP * (hpPrevY + x - hpPrevX)
-            hpPrevX = x
-            hpPrevY = hp
+        if (samples.isEmpty()) return samples
 
-            // Stage 2: Low-pass filter (7.5 kHz hiss cut)
-            val lp = lpPrevY + aLP * (hp - lpPrevY)
-            lpPrevY = lp
+        // Stage 1: DC offset removal
+        dcBlocker.process(samples)
 
-            // Stage 3: Gain + clipping
-            // Preserves natural speech formant spectrum required by Whisper
-            samples[i] = (lp * gain).coerceIn(-0.98f, 0.98f)
-        }
+        // Stage 2: 80 Hz Butterworth High-Pass (removes rumble, preserves fundamental pitch)
+        hpFilter.process(samples)
+
+        // Stage 3: Conditional hum notch
+        notch50?.process(samples)
+        notch60?.process(samples)
+
+        // Stage 4: 7.5 kHz Low-Pass
+        lpFilter.process(samples)
+
+        // Stage 5: Target gain & soft-knee limiter (capping strictly at <= 0.98 without clipping)
+        normalizer.process(samples)
+
         return samples
     }
 
     /**
-     * Preserves audio intact. Silero VAD already provides clean speech boundaries;
-     * internal gating is a no-op to prevent cutting soft consonants and quiet word endings.
+     * Preserves audio intact. Silero VAD provides speech boundaries;
+     * internal gating is a no-op to prevent cutting soft consonants.
      */
     fun softGate(samples: FloatArray, sampleRate: Int = 16_000): FloatArray = samples
+
+    fun reset() {
+        dcBlocker.reset()
+        hpFilter.reset()
+        notch50?.reset()
+        notch60?.reset()
+        lpFilter.reset()
+    }
 
     companion object {
         const val TARGET_SPEECH_DB = -20f
@@ -75,6 +82,27 @@ class AudioPreprocessor(
         const val DEFAULT_NOISE_FLOOR_DB = -45f
         const val GATE_ATTENUATION_DB = -12f
         private const val FRAME = 400 // 25 ms at 16 kHz
+
+        /** Factory method constructing an optimal preprocessor directly from an [AudioReport]. */
+        fun fromReport(
+            report: AudioReport,
+            sampleRate: Int = 16_000,
+            highPassHz: Float = 80f,
+            lowPassHz: Float = 7500f,
+        ): AudioPreprocessor {
+            return AudioPreprocessor(
+                gain = report.targetGain,
+                noiseFloorDb = report.noiseFloorDb,
+                sampleRate = sampleRate,
+                highPassHz = highPassHz,
+                lowPassHz = lowPassHz,
+                hasHum50Hz = report.hasHum50Hz,
+                hasHum60Hz = report.hasHum60Hz,
+            )
+        }
+
+        /** Single-pass diagnostic analysis over the file. */
+        fun analyze(wav: File): AudioReport = AudioDiagnostics.analyze(wav)
 
         /** Gain that brings speech frames to [TARGET_SPEECH_DB], bounded so noise is not blown up. */
         fun gainFor(frameDb: List<Float>): Float {
@@ -89,12 +117,10 @@ class AudioPreprocessor(
 
         /**
          * Estimates the noise floor from the quietest frames of the recording.
-         * Used to configure the soft noise gate threshold.
          */
         fun measureNoiseFloor(frameLevels: List<Float>): Float {
             if (frameLevels.isEmpty()) return DEFAULT_NOISE_FLOOR_DB
             val sorted = frameLevels.sorted()
-            // Noise floor = median of quietest 10% of frames, plus 3 dB margin
             val noiseMedian = sorted[sorted.size / 10]
             return (noiseMedian + 3f).coerceIn(-55f, -30f)
         }
@@ -104,26 +130,12 @@ class AudioPreprocessor(
             return measure(wav).first
         }
 
-        /** Returns (gain, noiseFloorDb) pair. */
+        /** Returns (gain, noiseFloorDb) pair. Uses AudioDiagnostics for fast analysis. */
         fun measure(wav: File): Pair<Float, Float> {
-            val levels = ArrayList<Float>()
-            WavReader(wav).use { r ->
-                while (true) {
-                    val s = r.read(FRAME * 40)
-                    if (s.isEmpty()) break
-                    var i = 0
-                    while (i + FRAME <= s.size) {
-                        var sum = 0.0
-                        for (j in i until i + FRAME) sum += s[j].toDouble() * s[j]
-                        levels += (10 * log10(sum / FRAME + 1e-12)).toFloat()
-                        i += FRAME
-                    }
-                }
-            }
-            return gainFor(levels) to measureNoiseFloor(levels)
+            val report = AudioDiagnostics.analyze(wav)
+            return report.targetGain to report.noiseFloorDb
         }
 
         fun rms(x: FloatArray): Float = sqrt(x.fold(0.0) { a, v -> a + v * v } / x.size.coerceAtLeast(1)).toFloat()
     }
 }
-

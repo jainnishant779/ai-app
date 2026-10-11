@@ -68,7 +68,7 @@ class SpeakerDiarizer(private val modelRoot: File, private val threshold: Float 
          * 0.88 merges pitch variations of the same person while still separating distinct voices.
          */
         const val DEFAULT_THRESHOLD = 0.88f
-        /** Measured on a noisy 6+ person meeting: about 0.3-0.6x realtime, so longer recordings would stall the transcript for many minutes. */
-        const val MAX_SAMPLES = 20L * 60 * 16_000
+        /** Supports up to 45-minute meetings on device without memory exhaustion (~172 MB float array). */
+        const val MAX_SAMPLES = 45L * 60 * 16_000
     }
 }

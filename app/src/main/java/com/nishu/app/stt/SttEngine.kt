@@ -2,8 +2,14 @@ package com.nishu.app.stt
 
 import java.io.File
 
-/** [speaker] is 0-based by first appearance, or null when there was no speaker information. */
-data class Seg(val startMs: Long, val endMs: Long, val text: String, val speaker: Int? = null)
+/** [speaker] is 0-based by first appearance, or null when there was no speaker information. [isCrossTalk] marks overlapping speech. */
+data class Seg(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
+    val speaker: Int? = null,
+    val isCrossTalk: Boolean = false,
+)
 
 class SttModelMissing(message: String) : Exception(message)
 
